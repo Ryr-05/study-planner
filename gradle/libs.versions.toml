@@ -1,11 +1,14 @@
 [versions]
 agp = "8.13.2"
 kotlin = "2.2.21"
+ksp = "2.2.21-2.0.5"
 composeBom = "2025.12.01"
 activityCompose = "1.11.0"
 coreKtx = "1.17.0"
 iconsExtended = "1.7.8"
 haze = "1.7.1"
+room = "2.8.4"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -20,8 +23,13 @@ compose-animation = { module = "androidx.compose.animation:animation" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "iconsExtended" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 // CI passes these in so every build gets a higher version number,
@@ -81,4 +82,10 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.haze)
+
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    testImplementation(libs.junit)
 }

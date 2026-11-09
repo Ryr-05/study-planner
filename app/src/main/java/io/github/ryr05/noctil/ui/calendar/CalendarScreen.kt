@@ -28,7 +28,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,7 +40,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.noctil.data.TaskStore
+import androidx.compose.runtime.remember
+import io.github.ryr05.noctil.data.model.Snapshot
+import io.github.ryr05.noctil.data.model.TaskItem
+import io.github.ryr05.noctil.ui.components.RoundIconButton
+import io.github.ryr05.noctil.ui.tasks.TaskActions
+import io.github.ryr05.noctil.ui.tasks.openTaskOrder
 import io.github.ryr05.noctil.ui.components.ScreenTitle
 import io.github.ryr05.noctil.ui.components.SectionLabel
 import io.github.ryr05.noctil.ui.components.TaskRow
@@ -60,11 +64,18 @@ private val dayTitleFormat = DateTimeFormatter.ofPattern("EEEE, MMMM d")
 private val a11yDayFormat = DateTimeFormatter.ofPattern("EEEE, MMMM d")
 
 @Composable
-fun CalendarScreen(store: TaskStore, today: LocalDate) {
-    var month by rememberSaveable { mutableStateOf(YearMonth.from(today)) }
-    var selected by rememberSaveable { mutableStateOf(today) }
-    val busyDays = store.datesWithOpenTasks()
-    val dayTasks = store.tasks.filter { it.date == selected }.sortedWith(compareBy({ it.done }, { it.time }))
+fun CalendarScreen(
+    snapshot: Snapshot,
+    today: LocalDate,
+    selected: LocalDate,
+    onSelect: (LocalDate) -> Unit,
+    actions: TaskActions,
+) {
+    var month by rememberSaveable { mutableStateOf(YearMonth.from(selected)) }
+    val busyDays = remember(snapshot) { snapshot.tasks.filter { !it.done && it.date != null }.mapNotNull { it.date }.toSet() }
+    val dayTasks = snapshot.tasks
+        .filter { it.date == selected && (it.parentId == null || !it.done) }
+        .sortedWith(compareBy<TaskItem>({ it.done }).then(openTaskOrder))
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -93,7 +104,7 @@ fun CalendarScreen(store: TaskStore, today: LocalDate) {
                 today = today,
                 selected = selected,
                 busyDays = busyDays,
-                onSelect = { selected = it },
+                onSelect = onSelect,
                 modifier = Modifier.padding(top = 20.dp),
             )
         }
@@ -105,7 +116,7 @@ fun CalendarScreen(store: TaskStore, today: LocalDate) {
         if (dayTasks.isEmpty()) {
             item(key = "empty") {
                 Text(
-                    text = "Nothing planned for this day.",
+                    text = "Nothing planned. Tap + to add a task on this day.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Palette.TextSecondary,
                     modifier = Modifier.padding(start = 4.dp),
@@ -119,26 +130,13 @@ fun CalendarScreen(store: TaskStore, today: LocalDate) {
                     count = dayTasks.size,
                     today = today,
                     showDate = false,
-                    onToggle = store::toggle,
+                    onToggle = actions.onToggle,
+                    onOpen = actions.onOpen,
+                    onMoveToTomorrow = actions.onMoveToTomorrow,
                     modifier = Modifier.animateItem(),
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun RoundIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(Palette.SurfaceHigh)
-            .selectable(selected = false, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = Palette.TextPrimary)
     }
 }
 

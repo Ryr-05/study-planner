@@ -5,28 +5,38 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,22 +44,26 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.noctil.data.Priority
-import io.github.ryr05.noctil.data.Task
+import io.github.ryr05.noctil.data.model.Priority
+import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.ui.theme.Palette
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-private val timeFormat = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+val timeFormat: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 private val dayFormat = DateTimeFormatter.ofPattern("EEE, MMM d")
 
 fun Priority.color(): Color = when (this) {
@@ -66,60 +80,109 @@ fun relativeDay(date: LocalDate, today: LocalDate): String = when (date) {
     else -> date.format(dayFormat)
 }
 
-/** A titled inset group of tasks. Rows animate when they move between groups. */
-fun LazyListScope.taskSection(
-    key: String,
-    title: String,
-    tasks: List<Task>,
-    today: LocalDate,
-    showDate: Boolean,
-    onToggle: (Int) -> Unit,
-    titleColor: Color = Palette.TextSecondary,
-) {
-    if (tasks.isEmpty()) return
-    item(key = "header-$key") {
-        SectionLabel(title, color = titleColor, modifier = Modifier.animateItem())
-    }
-    itemsIndexed(tasks, key = { _, task -> "task-${task.id}" }) { index, task ->
-        TaskRow(
-            task = task,
-            index = index,
-            count = tasks.size,
-            today = today,
-            showDate = showDate,
-            onToggle = onToggle,
-            modifier = Modifier.animateItem(),
-        )
-    }
-}
-
+/**
+ * One task in a list. Tap to open, tap the circle to finish.
+ * Swipe right to finish, swipe left to move it to tomorrow.
+ */
 @Composable
 fun TaskRow(
-    task: Task,
+    task: TaskItem,
     index: Int,
     count: Int,
     today: LocalDate,
     showDate: Boolean,
-    onToggle: (Int) -> Unit,
+    onToggle: (TaskItem) -> Unit,
+    onOpen: (TaskItem) -> Unit,
     modifier: Modifier = Modifier,
+    showList: Boolean = true,
+    onMoveToTomorrow: ((TaskItem) -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
+    val shape = groupShape(index, count)
+    val swipeEnabled = !task.done && onMoveToTomorrow != null
+
+    val state = rememberSwipeToDismissBoxState()
+    val scope = rememberCoroutineScope()
+
+    SwipeToDismissBox(
+        state = state,
+        modifier = modifier.clip(shape),
+        enableDismissFromStartToEnd = swipeEnabled,
+        enableDismissFromEndToStart = swipeEnabled,
+        onDismiss = { value ->
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> onToggle(task)
+                SwipeToDismissBoxValue.EndToStart -> onMoveToTomorrow?.invoke(task)
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+            // Spring back into place; the list then moves the task where it belongs.
+            scope.launch { state.reset() }
+        },
+        backgroundContent = {
+            val direction = state.dismissDirection
+            val (color, icon, label, alignEnd) = when (direction) {
+                SwipeToDismissBoxValue.EndToStart -> SwipeLook(Palette.PriorityMedium, Icons.Rounded.WbTwilight, "Tomorrow", true)
+                else -> SwipeLook(Palette.Lavender, Icons.Rounded.Check, "Done", false)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color.copy(alpha = 0.22f))
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = color)
+                    Spacer(Modifier.width(8.dp))
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = color)
+                }
+            }
+        },
+    ) {
+        RowContent(task, index, today, showDate, showList, onToggle, onOpen, onMoveToTomorrow)
+    }
+}
+
+private data class SwipeLook(val color: Color, val icon: ImageVector, val label: String, val alignEnd: Boolean)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RowContent(
+    task: TaskItem,
+    index: Int,
+    today: LocalDate,
+    showDate: Boolean,
+    showList: Boolean,
+    onToggle: (TaskItem) -> Unit,
+    onOpen: (TaskItem) -> Unit,
+    onMoveToTomorrow: ((TaskItem) -> Unit)?,
+) {
+    val haptics = LocalHapticFeedback.current
+    val overdue = !task.done && task.date != null && task.date.isBefore(today)
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .clip(groupShape(index, count))
             .background(Palette.Surface)
             .drawBehind {
                 if (index > 0) {
                     drawLine(
                         color = Palette.Hairline,
-                        start = Offset(64.dp.toPx(), 0f),
+                        start = Offset(56.dp.toPx(), 0f),
                         end = Offset(size.width - 16.dp.toPx(), 0f),
                         strokeWidth = 1.dp.toPx(),
                     )
                 }
             }
-            .padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            .clickable(onClickLabel = "Open task") { onOpen(task) }
+            .semantics {
+                if (onMoveToTomorrow != null && !task.done) {
+                    customActions = listOf(
+                        CustomAccessibilityAction("Move to tomorrow") { onMoveToTomorrow(task); true },
+                    )
+                }
+            }
+            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CheckCircle(
@@ -128,11 +191,11 @@ fun TaskRow(
             label = task.title,
             onToggle = {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onToggle(task.id)
+                onToggle(task)
             },
         )
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Spacer(Modifier.width(4.dp))
+        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
             Text(
                 text = task.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -142,38 +205,36 @@ fun TaskRow(
                 overflow = TextOverflow.Ellipsis,
             )
             val whenText = buildList {
-                if (showDate) add(relativeDay(task.date, today))
+                if (showDate && task.date != null) add(relativeDay(task.date, today))
                 task.time?.let { add(it.format(timeFormat)) }
             }.joinToString(", ")
-            if (whenText.isNotEmpty() || task.subject != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+            val hasMeta = whenText.isNotEmpty() || task.recurrence != null || (showList && task.list != null) ||
+                task.tags.isNotEmpty() || task.subtaskTotal > 0 || task.checklistTotal > 0
+            if (hasMeta) {
+                FlowRow(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (whenText.isNotEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Rounded.Schedule,
-                                contentDescription = null,
-                                tint = Palette.TextSecondary,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = whenText,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Palette.TextSecondary,
-                            )
-                        }
+                        Meta(Icons.Rounded.Schedule, whenText, if (overdue) Palette.PriorityHigh else Palette.TextSecondary)
                     }
-                    task.subject?.let { SubjectTag(it) }
+                    if (task.recurrence != null) Meta(Icons.Rounded.EventRepeat, null, Palette.TextSecondary)
+                    if (task.subtaskTotal > 0) {
+                        Meta(Icons.Rounded.AccountTree, "${task.subtaskDone}/${task.subtaskTotal}", Palette.TextSecondary)
+                    }
+                    if (task.checklistTotal > 0) {
+                        Meta(Icons.Rounded.Checklist, "${task.checklistDone}/${task.checklistTotal}", Palette.TextSecondary)
+                    }
+                    if (showList) task.list?.let { ColorTag(it.name, it.color) }
+                    task.tags.forEach { ColorTag("#${it.name}", it.color) }
                 }
             }
         }
         if (!task.done && (task.priority == Priority.High || task.priority == Priority.Medium)) {
             Icon(
                 Icons.Rounded.Flag,
-                contentDescription = "${task.priority.name} priority",
+                contentDescription = "${task.priority.label} priority",
                 tint = task.priority.color(),
                 modifier = Modifier.padding(start = 8.dp).size(18.dp),
             )
@@ -182,7 +243,24 @@ fun TaskRow(
 }
 
 @Composable
-private fun CheckCircle(checked: Boolean, ringColor: Color, label: String, onToggle: () -> Unit) {
+private fun Meta(icon: ImageVector, text: String?, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        if (text != null) {
+            Spacer(Modifier.width(4.dp))
+            Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+        }
+    }
+}
+
+@Composable
+fun CheckCircle(
+    checked: Boolean,
+    ringColor: Color,
+    label: String,
+    onToggle: () -> Unit,
+    size: androidx.compose.ui.unit.Dp = 24.dp,
+) {
     val fill by animateColorAsState(
         targetValue = if (checked) Palette.Lavender else Color.Transparent,
         label = "checkFill",
@@ -202,7 +280,7 @@ private fun CheckCircle(checked: Boolean, ringColor: Color, label: String, onTog
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
+                .size(size)
                 .clip(CircleShape)
                 .background(fill)
                 .border(2.dp, if (checked) Palette.Lavender else ringColor, CircleShape),
@@ -213,7 +291,7 @@ private fun CheckCircle(checked: Boolean, ringColor: Color, label: String, onTog
                     Icons.Rounded.Check,
                     contentDescription = null,
                     tint = Palette.OnLavender,
-                    modifier = Modifier.size(16.dp).scale(pop),
+                    modifier = Modifier.size(size * 0.66f).scale(pop),
                 )
             }
         }

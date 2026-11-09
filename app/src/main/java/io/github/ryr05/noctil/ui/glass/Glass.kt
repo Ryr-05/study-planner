@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,12 +36,18 @@ import io.github.ryr05.noctil.ui.theme.Palette
 val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 object GlassDefaults {
-    val style = HazeStyle(
+    /** Light glass for small floating controls. */
+    const val THIN = 0.50f
+
+    /** Denser glass for sheets that hold a lot of text, so it stays easy to read. */
+    const val THICK = 0.86f
+
+    fun style(tintAlpha: Float) = HazeStyle(
         backgroundColor = Palette.Night,
-        tint = HazeTint(Palette.GlassTint.copy(alpha = 0.50f)),
+        tint = HazeTint(Palette.GlassTint.copy(alpha = tintAlpha)),
         blurRadius = 30.dp,
         noiseFactor = 0.05f,
-        fallbackTint = HazeTint(Palette.GlassFallback.copy(alpha = 0.96f)),
+        fallbackTint = HazeTint(Palette.GlassFallback.copy(alpha = 0.97f)),
     )
 
     val rim = Brush.verticalGradient(
@@ -61,9 +68,11 @@ fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = CircleShape,
     elevation: Dp = 18.dp,
+    tintAlpha: Float = GlassDefaults.THIN,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val haze = LocalHazeState.current
+    val style = remember(tintAlpha) { GlassDefaults.style(tintAlpha) }
     Box(
         modifier = modifier
             .shadow(
@@ -76,7 +85,7 @@ fun GlassSurface(
             .clip(shape)
             .then(
                 if (haze != null) {
-                    Modifier.hazeEffect(state = haze, style = GlassDefaults.style)
+                    Modifier.hazeEffect(state = haze, style = style)
                 } else {
                     Modifier.background(Palette.GlassFallback.copy(alpha = 0.96f))
                 },

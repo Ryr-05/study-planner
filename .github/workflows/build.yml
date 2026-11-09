@@ -2,10 +2,11 @@ name: Build APK
 
 # Every push to main builds a signed APK and publishes it as the newest Release,
 # so the "Download APK" button in the README always gets the latest version.
+# Pushes to dev/** branches build and test but do not publish a release.
 # Pull requests only build (no signing, no release) to check that the code compiles.
 on:
   push:
-    branches: [main]
+    branches: [main, 'dev/**']
   pull_request:
   workflow_dispatch:
 
@@ -39,6 +40,9 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Build release APK
         env:

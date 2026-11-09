@@ -2,6 +2,17 @@ package io.github.ryr05.noctil.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.noctil.data.Subject
 import io.github.ryr05.noctil.ui.theme.Palette
 
 /** Height reserved at the bottom of every screen for the floating tab bar. */
@@ -77,16 +87,76 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, color: Color = Pal
     )
 }
 
+/** A small colored label for a list or tag name. */
 @Composable
-fun SubjectTag(subject: Subject, modifier: Modifier = Modifier) {
+fun ColorTag(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
-        text = subject.name,
+        text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = subject.color,
+        color = color,
+        maxLines = 1,
         modifier = modifier
-            .background(subject.color.copy(alpha = 0.14f), RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.14f), RoundedCornerShape(50))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     )
+}
+
+/** Round 44dp icon button on a solid surface. */
+@Composable
+fun RoundIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(Palette.SurfaceHigh)
+            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(icon, contentDescription = null, tint = Palette.TextPrimary)
+    }
+}
+
+/** A pill-shaped choice used for priorities, repeat options and similar. */
+@Composable
+fun Pill(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = Palette.Lavender,
+    leading: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier
+            .height(36.dp)
+            .clip(CircleShape)
+            .background(if (selected) color.copy(alpha = 0.20f) else Palette.SurfaceHigh)
+            .border(1.dp, if (selected) color.copy(alpha = 0.55f) else Color.Transparent, CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leading != null) {
+            androidx.compose.material3.Icon(
+                leading, contentDescription = null,
+                tint = if (selected) color else Palette.TextSecondary,
+                modifier = Modifier.size(16.dp),
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) Palette.TextPrimary else Palette.TextSecondary,
+            maxLines = 1,
+        )
+    }
 }
 
 @Composable
