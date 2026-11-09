@@ -371,7 +371,6 @@ class Repository(
                     "Tap a task to add notes, subtasks and a checklist",
                     "Swipe right to finish, swipe left to move to tomorrow",
                     "Tap Today at the top to see your lists",
-                    "Add an exam with #exam to get a countdown",
                 ).forEachIndexed { i, title ->
                     db.tasks().insert(TaskEntity(title = title, dueDate = today, sortOrder = i.toLong()))
                 }

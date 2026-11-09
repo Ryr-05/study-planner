@@ -30,13 +30,24 @@ You can also open the app, go to **Me > Check for updates**.
 
 ## What works right now
 
-| Area | Status |
+**Type tasks the way you'd say them.** Tap **+** and write something like
+`chem lab fri 5pm !1 #lab ~Chemistry every monday`. Noctil picks out the date, time,
+priority, tag, list and repeat, and highlights them as you type.
+
+| Area | What you can do |
 |---|---|
-| Today list with overdue, today, coming up, completed | Working (sample tasks) |
-| Quick add with the **+** button | Working (adds to today) |
-| Month calendar with task markers | Working |
-| Focus timer (25 / 5 / 15 minutes) | Working |
-| Saving tasks, reminders, widgets, lockscreen card | Next updates |
+| Tasks | Notes, due date and time, priority, colored tags, subtasks (nested), checklists |
+| Lists | Lists for each class, folders to group them, plus Today, Next 7 days, High priority, All, Completed and Inbox |
+| Repeat | Daily, weekdays, weekly on chosen days, every few days, monthly, yearly |
+| Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Survives restarts |
+| Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change |
+| Search | Titles, notes, checklist items, tags and list names |
+| Exams | Tag a task `#exam` (or name it "midterm", "quiz"...) to get a countdown on Today |
+| Calendar | Month view with task markers. Tap a day to see and add tasks |
+| Focus | Pomodoro timer (25 / 5 / 15 minutes) |
+| Offline | Everything is saved on your phone. No account, no internet needed |
+
+Coming next: home screen widgets and the lockscreen card.
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 

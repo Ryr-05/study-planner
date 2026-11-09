@@ -61,6 +61,21 @@ android {
     }
 }
 
+// Print a one-line summary of the unit tests in the CI log.
+tasks.withType<Test>().configureEach {
+    testLogging { events("failed") }
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(testDescriptor: TestDescriptor) {}
+        override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null) {
+                println("Unit tests: ${result.testCount} run, ${result.successfulTestCount} passed, ${result.failedTestCount} failed")
+            }
+        }
+    })
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)

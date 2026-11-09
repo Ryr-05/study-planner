@@ -36,7 +36,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -103,22 +105,29 @@ fun TaskRow(
 
     val state = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
+    val currentTask by rememberUpdatedState(task)
+    val currentToggle by rememberUpdatedState(onToggle)
+    val currentTomorrow by rememberUpdatedState(onMoveToTomorrow)
+    // Kept stable so the swipe action runs once per swipe, even if the row redraws mid-swipe.
+    val onDismiss: (SwipeToDismissBoxValue) -> Unit = remember(task.id) {
+        { value ->
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> currentToggle(currentTask)
+                SwipeToDismissBoxValue.EndToStart -> currentTomorrow?.invoke(currentTask)
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+            // Spring back into place; the list then moves the task where it belongs.
+            scope.launch { state.reset() }
+        }
+    }
 
     SwipeToDismissBox(
         state = state,
         modifier = modifier.clip(shape),
         enableDismissFromStartToEnd = swipeEnabled,
         enableDismissFromEndToStart = swipeEnabled,
-        onDismiss = { value ->
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> onToggle(task)
-                SwipeToDismissBoxValue.EndToStart -> onMoveToTomorrow?.invoke(task)
-                SwipeToDismissBoxValue.Settled -> Unit
-            }
-            // Spring back into place; the list then moves the task where it belongs.
-            scope.launch { state.reset() }
-        },
+        onDismiss = onDismiss,
         backgroundContent = {
             val direction = state.dismissDirection
             val (color, icon, label, alignEnd) = when (direction) {
