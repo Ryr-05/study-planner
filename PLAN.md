@@ -1,6 +1,6 @@
-# Student Task + Calendar App — Build Plan
+# Noctil — Build Plan
 
-> Working name: **[AppName]** (pick one later — it only changes a few strings).
+> Name: **Noctil** (from "nocturnal"). Logo: a minimalist full moon with three soft craters (`docs/logo.svg`).
 > Free Android app for students: tasks, calendar, widgets, lockscreen, works offline and online.
 
 ---
@@ -150,7 +150,7 @@ Web app → Telegram bot → MCP server. iOS, Alexa and Siri are not planned.
 **How it works**
 1. Code lives in a GitHub repo.
 2. Every push to `main` makes **GitHub Actions** (free) build and sign the APK in the cloud. Your Mac doesn't need to build anything. The version number goes up automatically (`0.1.<build number>`).
-3. The APK is attached to a new GitHub **Release** with a fixed file name (`StudyPlanner.apk`).
+3. The APK is attached to a new GitHub **Release** with a fixed file name (`Noctil.apk`).
 4. The README button always points at the newest one:
 
 ```markdown

@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.theme
+package io.github.ryr05.noctil.ui.theme
 
 import android.provider.Settings
 import androidx.compose.material3.MaterialTheme

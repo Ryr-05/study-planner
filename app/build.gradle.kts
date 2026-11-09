@@ -13,11 +13,11 @@ val ciVersionName = System.getenv("VERSION_NAME") ?: "0.1.0-local"
 val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 
 android {
-    namespace = "io.github.ryr05.studyplanner"
+    namespace = "io.github.ryr05.noctil"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.ryr05.studyplanner"
+        applicationId = "io.github.ryr05.noctil"
         minSdk = 26
         targetSdk = 36
         versionCode = ciVersionCode

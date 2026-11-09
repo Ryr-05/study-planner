@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.calendar
+package io.github.ryr05.noctil.ui.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,13 +41,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.studyplanner.data.TaskStore
-import io.github.ryr05.studyplanner.ui.components.ScreenTitle
-import io.github.ryr05.studyplanner.ui.components.SectionLabel
-import io.github.ryr05.studyplanner.ui.components.TaskRow
-import io.github.ryr05.studyplanner.ui.components.bottomContentPadding
-import io.github.ryr05.studyplanner.ui.components.topContentPadding
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.data.TaskStore
+import io.github.ryr05.noctil.ui.components.ScreenTitle
+import io.github.ryr05.noctil.ui.components.SectionLabel
+import io.github.ryr05.noctil.ui.components.TaskRow
+import io.github.ryr05.noctil.ui.components.bottomContentPadding
+import io.github.ryr05.noctil.ui.components.topContentPadding
+import io.github.ryr05.noctil.ui.theme.Palette
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth

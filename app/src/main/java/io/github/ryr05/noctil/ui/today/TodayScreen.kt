@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.today
+package io.github.ryr05.noctil.ui.today
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,13 +27,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.studyplanner.data.Exam
-import io.github.ryr05.studyplanner.data.TaskStore
-import io.github.ryr05.studyplanner.ui.components.ScreenTitle
-import io.github.ryr05.studyplanner.ui.components.bottomContentPadding
-import io.github.ryr05.studyplanner.ui.components.taskSection
-import io.github.ryr05.studyplanner.ui.components.topContentPadding
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.data.Exam
+import io.github.ryr05.noctil.data.TaskStore
+import io.github.ryr05.noctil.ui.components.ScreenTitle
+import io.github.ryr05.noctil.ui.components.bottomContentPadding
+import io.github.ryr05.noctil.ui.components.taskSection
+import io.github.ryr05.noctil.ui.components.topContentPadding
+import io.github.ryr05.noctil.ui.theme.Palette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit

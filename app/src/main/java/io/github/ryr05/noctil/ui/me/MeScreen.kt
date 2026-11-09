@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.me
+package io.github.ryr05.noctil.ui.me
 
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -42,12 +42,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import io.github.ryr05.studyplanner.ui.components.ScreenTitle
-import io.github.ryr05.studyplanner.ui.components.SectionLabel
-import io.github.ryr05.studyplanner.ui.components.bottomContentPadding
-import io.github.ryr05.studyplanner.ui.components.groupShape
-import io.github.ryr05.studyplanner.ui.components.topContentPadding
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.ui.components.ScreenTitle
+import io.github.ryr05.noctil.ui.components.SectionLabel
+import io.github.ryr05.noctil.ui.components.bottomContentPadding
+import io.github.ryr05.noctil.ui.components.groupShape
+import io.github.ryr05.noctil.ui.components.topContentPadding
+import io.github.ryr05.noctil.ui.theme.Palette
 
 private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releases/latest"
 

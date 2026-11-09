@@ -1,10 +1,12 @@
 <div align="center">
 
-# Study Planner
+<img src="docs/logo.svg" width="112" alt="Noctil logo: a full moon with three craters">
+
+# Noctil
 
 A free task planner and calendar for students. Works offline. Made for Android.
 
-<a href="https://github.com/Ryr-05/study-planner/releases/latest/download/StudyPlanner.apk">
+<a href="https://github.com/Ryr-05/study-planner/releases/latest/download/Noctil.apk">
   <img src="https://img.shields.io/badge/Download-APK-B9A3FF?style=for-the-badge&logo=android&logoColor=1B1033&labelColor=1A1427" alt="Download APK" height="56">
 </a>
 

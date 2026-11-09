@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.theme
+package io.github.ryr05.noctil.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

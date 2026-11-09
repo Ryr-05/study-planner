@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "StudyPlanner"
+rootProject.name = "Noctil"
 include(":app")

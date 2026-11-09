@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.focus
+package io.github.ryr05.noctil.ui.focus
 
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
@@ -44,11 +44,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.studyplanner.ui.components.ScreenTitle
-import io.github.ryr05.studyplanner.ui.components.bottomContentPadding
-import io.github.ryr05.studyplanner.ui.components.topContentPadding
-import io.github.ryr05.studyplanner.ui.theme.Palette
-import io.github.ryr05.studyplanner.ui.theme.rememberReduceMotion
+import io.github.ryr05.noctil.ui.components.ScreenTitle
+import io.github.ryr05.noctil.ui.components.bottomContentPadding
+import io.github.ryr05.noctil.ui.components.topContentPadding
+import io.github.ryr05.noctil.ui.theme.Palette
+import io.github.ryr05.noctil.ui.theme.rememberReduceMotion
 import kotlinx.coroutines.delay
 
 enum class FocusMode(val label: String, val minutes: Int) {

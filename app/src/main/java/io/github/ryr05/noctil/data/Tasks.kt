@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.data
+package io.github.ryr05.noctil.data
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.graphics.Color

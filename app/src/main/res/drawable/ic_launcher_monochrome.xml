@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single-color version for Android 13+ themed icons: the craters are cut out of the moon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M28,54a26,26 0,1 0,52 0a26,26 0,1 0,-52 0Z M40.5,47.25a5.6,5.6 0,1 0,11.2 0a5.6,5.6 0,1 0,-11.2 0Z M59.1,61.9a3.9,3.9 0,1 0,7.8 0a3.9,3.9 0,1 0,-7.8 0Z M59.4,43.9a2.5,2.5 0,1 0,5 0a2.5,2.5 0,1 0,-5 0Z" />
+</vector>

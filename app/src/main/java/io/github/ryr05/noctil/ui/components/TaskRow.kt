@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.components
+package io.github.ryr05.noctil.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -42,9 +42,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.studyplanner.data.Priority
-import io.github.ryr05.studyplanner.data.Task
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.data.Priority
+import io.github.ryr05.noctil.data.Task
+import io.github.ryr05.noctil.ui.theme.Palette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle

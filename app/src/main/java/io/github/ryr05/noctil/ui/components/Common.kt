@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.components
+package io.github.ryr05.noctil.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,8 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.ryr05.studyplanner.data.Subject
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.data.Subject
+import io.github.ryr05.noctil.ui.theme.Palette
 
 /** Height reserved at the bottom of every screen for the floating tab bar. */
 val BottomChromeHeight = 104.dp

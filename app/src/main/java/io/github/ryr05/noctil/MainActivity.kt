@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner
+package io.github.ryr05.noctil
 
 import android.graphics.Color
 import android.os.Bundle
@@ -6,8 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import io.github.ryr05.studyplanner.ui.StudyPlannerApp
-import io.github.ryr05.studyplanner.ui.theme.StudyTheme
+import io.github.ryr05.noctil.ui.NoctilApp
+import io.github.ryr05.noctil.ui.theme.StudyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             StudyTheme {
-                StudyPlannerApp()
+                NoctilApp()
             }
         }
     }

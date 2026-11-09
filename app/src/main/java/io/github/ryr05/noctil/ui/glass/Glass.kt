@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.glass
+package io.github.ryr05.noctil.ui.glass
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +21,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
-import io.github.ryr05.studyplanner.ui.theme.Palette
+import io.github.ryr05.noctil.ui.theme.Palette
 
 /**
  * Liquid-glass approximation for Android. This is not Apple's Liquid Glass (that only exists

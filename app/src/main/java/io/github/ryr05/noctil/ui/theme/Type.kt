@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui.theme
+package io.github.ryr05.noctil.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import io.github.ryr05.studyplanner.R
+import io.github.ryr05.noctil.R
 
 /** Geist variable font (SIL Open Font License, see licenses/Geist-OFL.txt). */
 val Geist = FontFamily(

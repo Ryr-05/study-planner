@@ -1,4 +1,4 @@
-package io.github.ryr05.studyplanner.ui
+package io.github.ryr05.noctil.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -78,16 +78,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import io.github.ryr05.studyplanner.data.TaskStore
-import io.github.ryr05.studyplanner.ui.calendar.CalendarScreen
-import io.github.ryr05.studyplanner.ui.components.AuroraBackground
-import io.github.ryr05.studyplanner.ui.focus.FocusScreen
-import io.github.ryr05.studyplanner.ui.glass.GlassSurface
-import io.github.ryr05.studyplanner.ui.glass.LocalHazeState
-import io.github.ryr05.studyplanner.ui.me.MeScreen
-import io.github.ryr05.studyplanner.ui.theme.Palette
-import io.github.ryr05.studyplanner.ui.theme.rememberReduceMotion
-import io.github.ryr05.studyplanner.ui.today.TodayScreen
+import io.github.ryr05.noctil.data.TaskStore
+import io.github.ryr05.noctil.ui.calendar.CalendarScreen
+import io.github.ryr05.noctil.ui.components.AuroraBackground
+import io.github.ryr05.noctil.ui.focus.FocusScreen
+import io.github.ryr05.noctil.ui.glass.GlassSurface
+import io.github.ryr05.noctil.ui.glass.LocalHazeState
+import io.github.ryr05.noctil.ui.me.MeScreen
+import io.github.ryr05.noctil.ui.theme.Palette
+import io.github.ryr05.noctil.ui.theme.rememberReduceMotion
+import io.github.ryr05.noctil.ui.today.TodayScreen
 import java.time.LocalDate
 
 enum class Tab(val label: String, val icon: ImageVector) {
@@ -98,7 +98,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun StudyPlannerApp() {
+fun NoctilApp() {
     val today = remember { LocalDate.now() }
     val store = remember { TaskStore(today) }
     var tab by rememberSaveable { mutableStateOf(Tab.Today) }
