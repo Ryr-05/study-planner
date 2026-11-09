@@ -1,0 +1,27 @@
+[versions]
+agp = "8.13.2"
+kotlin = "2.2.21"
+composeBom = "2025.12.01"
+activityCompose = "1.11.0"
+coreKtx = "1.17.0"
+iconsExtended = "1.7.8"
+haze = "1.7.3"
+
+[libraries]
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-animation = { module = "androidx.compose.animation:animation" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "iconsExtended" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

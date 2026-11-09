@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="night">#FF0E0A17</color>
+    <color name="icon_bg_top">#FF2A1C52</color>
+    <color name="icon_bg_bottom">#FF120B22</color>
+    <color name="lavender">#FFB9A3FF</color>
+</resources>
