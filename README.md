@@ -45,9 +45,14 @@ priority, tag, list and repeat, and highlights them as you type.
 | Exams | Tag a task `#exam` (or name it "midterm", "quiz"...) to get a countdown on Today |
 | Calendar | Month view with task markers. Tap a day to see and add tasks |
 | Focus | Pomodoro timer (25 / 5 / 15 minutes) |
+| Widgets | Today list (finish tasks from the home screen), month calendar, exam countdown, quick add bar |
+| Lockscreen | A silent Today card on your lockscreen, with an Add task button. Turn it off in Me |
+| Shortcuts | Quick Settings tile "Add task", and long-press the app icon for Add task, Today and Focus |
 | Offline | Everything is saved on your phone. No account, no internet needed |
 
-Coming next: home screen widgets and the lockscreen card.
+**Adding widgets:** open **Me > Lockscreen and widgets** and tap **Add** next to any widget.
+
+Coming next: week and day calendar views, class timetable, and two-way sync with your phone's calendars.
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 

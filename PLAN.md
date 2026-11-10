@@ -99,7 +99,7 @@ Every phase ends with a new APK you install and test on your phone.
 - Search
 
 ### Phase 2 — Widgets + lockscreen
-- Widgets: **Today list** (check things off from the widget), **Month calendar**, **Quick add**, **Exam countdown**, **Habit check-in**
+- Widgets: **Today list** (check things off from the widget), **Month calendar**, **Quick add**, **Exam countdown** (Habit check-in widget moves to Phase 4, where habits are built)
 - Lockscreen Today card (pinned notification) — can be turned on/off in settings
 - Quick Settings tile: "Add task"
 
@@ -113,7 +113,7 @@ Every phase ends with a new APK you install and test on your phone.
 - Pomodoro (25/5 or custom), stopwatch, linked to a task
 - White noise (rain, café, library) — free sound files packaged with the app
 - Live countdown on the lockscreen while focusing
-- Habit tracker: streaks, % complete, heatmap
+- Habit tracker: streaks, % complete, heatmap, plus the habit check-in widget
 - Stats: tasks done, hours focused, habit consistency (week/month/year charts)
 
 ### Phase 5 — Accounts + cloud sync

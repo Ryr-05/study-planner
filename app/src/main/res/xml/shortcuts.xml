@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon for these. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutId="add_task"
+        android:shortcutLongLabel="@string/shortcut_add_long"
+        android:shortcutShortLabel="@string/shortcut_add_short">
+        <intent
+            android:action="io.github.ryr05.noctil.action.QUICK_ADD"
+            android:targetClass="io.github.ryr05.noctil.MainActivity"
+            android:targetPackage="io.github.ryr05.noctil" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_today"
+        android:shortcutId="today"
+        android:shortcutLongLabel="@string/shortcut_today_long"
+        android:shortcutShortLabel="@string/shortcut_today_short">
+        <intent
+            android:action="io.github.ryr05.noctil.action.TODAY"
+            android:targetClass="io.github.ryr05.noctil.MainActivity"
+            android:targetPackage="io.github.ryr05.noctil" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_focus"
+        android:shortcutId="focus"
+        android:shortcutLongLabel="@string/shortcut_focus_long"
+        android:shortcutShortLabel="@string/shortcut_focus_short">
+        <intent
+            android:action="io.github.ryr05.noctil.action.FOCUS"
+            android:targetClass="io.github.ryr05.noctil.MainActivity"
+            android:targetPackage="io.github.ryr05.noctil" />
+    </shortcut>
+</shortcuts>

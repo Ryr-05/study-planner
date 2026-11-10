@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Noctil</string>
+
+    <string name="widget_today_desc">Today\'s tasks. Tap a circle to finish one.</string>
+    <string name="widget_calendar_desc">This month, with dots on days that have tasks.</string>
+    <string name="widget_exam_desc">Countdown to your next exam.</string>
+    <string name="widget_quickadd_desc">Add a task in one tap.</string>
+
+    <string name="tile_add_task">Add task</string>
+
+    <string name="shortcut_add_short">Add task</string>
+    <string name="shortcut_add_long">Add a task</string>
+    <string name="shortcut_today_short">Today</string>
+    <string name="shortcut_today_long">See today\'s tasks</string>
+    <string name="shortcut_focus_short">Focus</string>
+    <string name="shortcut_focus_long">Start a focus session</string>
 </resources>

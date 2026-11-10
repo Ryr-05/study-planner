@@ -9,12 +9,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import io.github.ryr05.noctil.reminders.EXTRA_OPEN_TASK
+import io.github.ryr05.noctil.ui.LaunchRequest
 import io.github.ryr05.noctil.ui.NoctilApp
 import io.github.ryr05.noctil.ui.theme.StudyTheme
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
-    /** Set when a reminder notification asks to open a specific task. */
-    private val openTask = mutableStateOf<Long?>(null)
+    /** Where to open the app when it was launched from a widget, notification, tile or shortcut. */
+    private val request = mutableStateOf<LaunchRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -22,12 +24,12 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) readOpenTask(intent)
+        if (savedInstanceState == null) read(intent)
         setContent {
             StudyTheme {
                 NoctilApp(
-                    openTaskRequest = openTask.value,
-                    onOpenTaskHandled = { openTask.value = null },
+                    launchRequest = request.value,
+                    onLaunchHandled = { request.value = null },
                 )
             }
         }
@@ -35,11 +37,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        readOpenTask(intent)
+        read(intent)
     }
 
-    private fun readOpenTask(intent: Intent?) {
-        val id = intent?.getLongExtra(EXTRA_OPEN_TASK, -1L) ?: -1L
-        if (id > 0) openTask.value = id
+    private fun read(intent: Intent?) {
+        intent ?: return
+        val taskId = intent.getLongExtra(EXTRA_OPEN_TASK, -1L)
+        request.value = when {
+            taskId > 0 -> LaunchRequest.OpenTask(taskId)
+            intent.action == Launch.ACTION_QUICK_ADD -> LaunchRequest.QuickAdd
+            intent.action == Launch.ACTION_FOCUS -> LaunchRequest.Focus
+            intent.action == Launch.ACTION_TODAY -> LaunchRequest.Today
+            intent.action == Launch.ACTION_OPEN_DATE && intent.hasExtra(Launch.EXTRA_OPEN_DATE) ->
+                LaunchRequest.OpenDate(LocalDate.ofEpochDay(intent.getLongExtra(Launch.EXTRA_OPEN_DATE, 0L)))
+            else -> request.value
+        }
     }
 }

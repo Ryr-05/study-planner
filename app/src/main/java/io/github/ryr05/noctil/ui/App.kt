@@ -49,6 +49,7 @@ import io.github.ryr05.noctil.data.model.Folder
 import io.github.ryr05.noctil.data.model.Tag
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.model.TaskList
+import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
 import io.github.ryr05.noctil.ui.calendar.CalendarScreen
 import io.github.ryr05.noctil.ui.components.AuroraBackground
@@ -72,6 +73,15 @@ import io.github.ryr05.noctil.ui.theme.Palette
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 
+/** A place to open the app at, from outside the app. */
+sealed interface LaunchRequest {
+    data class OpenTask(val id: Long) : LaunchRequest
+    data class OpenDate(val date: LocalDate) : LaunchRequest
+    data object QuickAdd : LaunchRequest
+    data object Today : LaunchRequest
+    data object Focus : LaunchRequest
+}
+
 private data class UndoMessage(val id: Long, val text: String, val undo: () -> Unit)
 
 private sealed interface Editor {
@@ -83,7 +93,7 @@ private sealed interface Editor {
 }
 
 @Composable
-fun NoctilApp(openTaskRequest: Long?, onOpenTaskHandled: () -> Unit) {
+fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     val context = LocalContext.current
     val repo = remember { (context.applicationContext as NoctilApplication).repository }
     val snapshot by repo.snapshot.collectAsState()
@@ -110,7 +120,10 @@ fun NoctilApp(openTaskRequest: Long?, onOpenTaskHandled: () -> Unit) {
         undo = UndoMessage(System.nanoTime(), text, action)
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        // Show the lockscreen card right away once notifications are allowed.
+        if (granted) LockscreenCard.update(context, repo.snapshot.value)
+    }
     fun askForNotificationsOnce() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !Notifications.canNotify(context) && !repo.askedForNotifications
@@ -131,15 +144,39 @@ fun NoctilApp(openTaskRequest: Long?, onOpenTaskHandled: () -> Unit) {
         if (missing) viewKey = TaskView.Today.key
     }
 
-    // Opening a task from a reminder notification.
-    LaunchedEffect(openTaskRequest) {
-        if (openTaskRequest != null) {
-            tab = Tab.Tasks
-            searchOpen = false
-            quickAddOpen = false
-            detailStack = listOf(openTaskRequest)
-            onOpenTaskHandled()
+    // Opening from a reminder, widget, lockscreen card, Quick Settings tile or shortcut.
+    LaunchedEffect(launchRequest) {
+        val request = launchRequest ?: return@LaunchedEffect
+        searchOpen = false
+        drawerOpen = false
+        when (request) {
+            is LaunchRequest.OpenTask -> {
+                tab = Tab.Tasks
+                quickAddOpen = false
+                detailStack = listOf(request.id)
+            }
+            is LaunchRequest.OpenDate -> {
+                detailStack = emptyList()
+                calendarDay = request.date
+                tab = Tab.Calendar
+            }
+            LaunchRequest.QuickAdd -> {
+                detailStack = emptyList()
+                tab = Tab.Tasks
+                viewKey = TaskView.Today.key
+                quickAddOpen = true
+            }
+            LaunchRequest.Today -> {
+                detailStack = emptyList()
+                tab = Tab.Tasks
+                viewKey = TaskView.Today.key
+            }
+            LaunchRequest.Focus -> {
+                detailStack = emptyList()
+                tab = Tab.Focus
+            }
         }
+        onLaunchHandled()
     }
 
     // Close the editor if its task was deleted elsewhere.

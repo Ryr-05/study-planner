@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,6 +73,8 @@ fun CalendarScreen(
     actions: TaskActions,
 ) {
     var month by rememberSaveable { mutableStateOf(YearMonth.from(selected)) }
+    // Follow the chosen day when it's set from outside, like tapping a day on the widget.
+    LaunchedEffect(selected) { month = YearMonth.from(selected) }
     val busyDays = remember(snapshot) { snapshot.tasks.filter { !it.done && it.date != null }.mapNotNull { it.date }.toSet() }
     val dayTasks = snapshot.tasks
         .filter { it.date == selected && (it.parentId == null || !it.done) }

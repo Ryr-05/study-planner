@@ -13,7 +13,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
+import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
+import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -66,8 +68,6 @@ private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releas
 private data class Upcoming(val icon: ImageVector, val title: String, val detail: String)
 
 private val upcoming = listOf(
-    Upcoming(Icons.Rounded.Widgets, "Home screen widgets", "Today list, calendar, quick add"),
-    Upcoming(Icons.Rounded.Lock, "Lockscreen card", "See today's tasks without unlocking"),
     Upcoming(Icons.Rounded.LocalFireDepartment, "Habits", "Streaks and a yearly heatmap"),
     Upcoming(Icons.Rounded.BarChart, "Statistics", "Tasks done and hours focused"),
     Upcoming(Icons.Rounded.CalendarMonth, "Calendar sync", "Two-way with Google and Samsung calendars"),
@@ -96,6 +96,13 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
         while (true) {
             value = Notifications.canNotify(context)
             delay(1_500)
+        }
+    }
+    // If notifications were just turned on in system settings, bring the lockscreen card back.
+    LaunchedEffect(notificationsOn) {
+        if (notificationsOn) {
+            val app = context.applicationContext as io.github.ryr05.noctil.NoctilApplication
+            LockscreenCard.update(context, app.repository.snapshot.value)
         }
     }
 
@@ -144,6 +151,8 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
                 onClick = { showTips = true },
             )
         }
+
+        lockscreenAndWidgets(notificationsOn)
 
         item(key = "soon-label") { SectionLabel("On the way") }
         items(count = upcoming.size, key = { "soon-$it" }) { index ->
