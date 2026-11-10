@@ -66,6 +66,7 @@ import io.github.ryr05.noctil.ui.components.ScreenTitle
 import io.github.ryr05.noctil.ui.components.bottomContentPadding
 import io.github.ryr05.noctil.ui.components.topContentPadding
 import io.github.ryr05.noctil.ui.tasks.openTaskOrder
+import io.github.ryr05.noctil.ui.components.Segmented
 import io.github.ryr05.noctil.ui.theme.Palette
 import io.github.ryr05.noctil.ui.theme.rememberReduceMotion
 import kotlinx.coroutines.delay
@@ -194,31 +195,20 @@ private fun Label(text: String) {
 
 @Composable
 private fun ModePicker(state: FocusState, onSelect: (FocusKind) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(CircleShape).background(Palette.Surface).padding(4.dp)) {
-        FocusKind.entries.forEach { kind ->
-            val isSelected = kind == state.kind
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-                    .clip(CircleShape)
-                    .background(if (isSelected) Palette.SurfaceHigh else Color.Transparent)
-                    .selectable(selected = isSelected, enabled = !state.running || isSelected, role = Role.Tab) { onSelect(kind) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    when (kind) {
-                        FocusKind.ShortBreak -> "Break"
-                        FocusKind.LongBreak -> "Long break"
-                        else -> kind.label
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) Palette.TextPrimary else Palette.TextSecondary,
-                    maxLines = 1,
-                )
+    val kinds = FocusKind.entries
+    Segmented(
+        labels = kinds.map {
+            when (it) {
+                FocusKind.ShortBreak -> "Break"
+                FocusKind.LongBreak -> "Long break"
+                else -> it.label
             }
-        }
-    }
+        },
+        selected = kinds.indexOf(state.kind),
+        onSelect = { onSelect(kinds[it]) },
+        minHeight = 40.dp,
+        enabled = { !state.running || kinds[it] == state.kind },
+    )
 }
 
 @Composable

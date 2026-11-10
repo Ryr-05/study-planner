@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.Timelapse
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,6 +65,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -97,6 +101,7 @@ fun QuickAddOverlay(
     today: LocalDate,
     onDismiss: () -> Unit,
     onSubmit: (ParsedInput, Long?) -> Unit,
+    initialText: String = "",
 ) {
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(visible = visible, enter = fadeIn(tween(160)), exit = fadeOut(tween(140))) {
@@ -117,7 +122,7 @@ fun QuickAddOverlay(
                 .navigationBarsPadding()
                 .padding(12.dp),
         ) {
-            QuickAddPanel(defaultDate, defaultListId, snapshot, today, onSubmit)
+            QuickAddPanel(defaultDate, defaultListId, snapshot, today, onSubmit, initialText)
         }
     }
 }
@@ -130,8 +135,12 @@ private fun QuickAddPanel(
     snapshot: Snapshot,
     today: LocalDate,
     onSubmit: (ParsedInput, Long?) -> Unit,
+    initialText: String,
 ) {
-    var text by rememberSaveable { mutableStateOf("") }
+    var field by rememberSaveable(initialText, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))
+    }
+    val text = field.text
     var disabled by remember { mutableStateOf(setOf<TokenKind>()) }
     val focus = remember { FocusRequester() }
     val parsed = remember(text, disabled, defaultDate) {
@@ -158,8 +167,8 @@ private fun QuickAddPanel(
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
+                    value = field,
+                    onValueChange = { field = it },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.TextPrimary),
                     cursorBrush = SolidColor(Palette.Lavender),
@@ -225,7 +234,7 @@ private fun QuickAddPanel(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Type dates, times and more: fri 5pm, tomorrow, every monday, !1, #exam, ~Chemistry",
+                text = "Type it naturally: friday next week 5pm, tmrw 3-5pm, every monday, in 2 hours, !1, #exam, ~Chemistry",
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.TextSecondary,
             )
@@ -236,19 +245,34 @@ private fun QuickAddPanel(
 private data class Chip(val kind: TokenKind, val icon: ImageVector, val label: String, val color: Color)
 
 private fun chipsFor(p: ParsedInput, today: LocalDate): List<Chip> = buildList {
-    if (p.date != null && !p.dateIsDefault) add(Chip(TokenKind.Date, Icons.Rounded.CalendarMonth, relativeDay(p.date, today), Palette.Lavender))
-    p.time?.let { add(Chip(TokenKind.Time, Icons.Rounded.Schedule, it.format(timeFormat), Palette.Lavender)) }
+    if (p.date != null && !p.dateIsDefault) {
+        val label = p.startDate?.let { "${relativeDay(it, today)} to ${relativeDay(p.date, today)}" } ?: relativeDay(p.date, today)
+        add(Chip(TokenKind.Date, Icons.Rounded.CalendarMonth, label, Palette.Lavender))
+    }
+    val lengthTyped = p.tokens.any { it.kind == TokenKind.Duration }
+    p.time?.let { t ->
+        val range = p.durationMinutes?.takeIf { !lengthTyped }?.let { t.plusMinutes(it.toLong()) }
+        val label = if (range != null) "${t.format(timeFormat)} to ${range.format(timeFormat)}" else t.format(timeFormat)
+        add(Chip(TokenKind.Time, Icons.Rounded.Schedule, label, Palette.Lavender))
+    }
+    if (lengthTyped) p.durationMinutes?.let { add(Chip(TokenKind.Duration, Icons.Rounded.Timelapse, lengthLabel(it), Palette.Lavender)) }
     p.recurrence?.let { add(Chip(TokenKind.Repeat, Icons.Rounded.EventRepeat, it.label(), Palette.Lavender)) }
     if (p.priority != Priority.None) add(Chip(TokenKind.Priority, Icons.Rounded.Flag, p.priority.label, p.priority.color()))
     p.listName?.let { add(Chip(TokenKind.List, Icons.Rounded.FolderOpen, it, Palette.Lavender)) }
     if (p.tags.isNotEmpty()) add(Chip(TokenKind.Tag, Icons.Rounded.Sell, p.tags.joinToString(" ") { "#$it" }, Palette.Lavender))
 }
 
+private fun lengthLabel(minutes: Int): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes % 60 == 0 -> "${minutes / 60} hr"
+    else -> "${minutes / 60} hr ${minutes % 60} min"
+}
+
 @Composable
 private fun ParsedChip(chip: Chip, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
-            .height(34.dp)
+            .heightIn(min = 34.dp)
             .clip(CircleShape)
             .background(chip.color.copy(alpha = 0.16f))
             .padding(start = 10.dp, end = 2.dp),

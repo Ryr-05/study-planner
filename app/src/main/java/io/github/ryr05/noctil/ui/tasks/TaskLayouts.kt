@@ -1,5 +1,7 @@
 package io.github.ryr05.noctil.ui.tasks
 
+import androidx.compose.material.icons.rounded.ViewTimeline
+import androidx.compose.runtime.key
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -327,19 +329,26 @@ fun MatrixView(tasks: List<TaskItem>, today: LocalDate, taskActions: TaskActions
             color = Palette.TextSecondary,
             modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
         )
-        for (row in 0..1) {
-            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (col in 0..1) {
-                    QuadrantBox(quads[row * 2 + col], today, taskActions, Modifier.weight(1f).fillMaxHeight())
-                }
+        if (LocalDensity.current.fontScale > 1.3f) {
+            // Big text: one box per row, so titles have room. The whole page scrolls.
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                quads.forEach { QuadrantBox(it, today, taskActions, Modifier.fillMaxWidth(), stacked = true) }
             }
-            if (row == 0) Spacer(Modifier.height(10.dp))
+        } else {
+            for (row in 0..1) {
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for (col in 0..1) {
+                        QuadrantBox(quads[row * 2 + col], today, taskActions, Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+                if (row == 0) Spacer(Modifier.height(10.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun QuadrantBox(q: Quadrant, today: LocalDate, taskActions: TaskActions, modifier: Modifier) {
+private fun QuadrantBox(q: Quadrant, today: LocalDate, taskActions: TaskActions, modifier: Modifier, stacked: Boolean = false) {
     Column(
         modifier
             .clip(RoundedCornerShape(24.dp))
@@ -353,8 +362,7 @@ private fun QuadrantBox(q: Quadrant, today: LocalDate, taskActions: TaskActions,
             Text("${q.tasks.size}", style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
         }
         Text(q.hint, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary, modifier = Modifier.padding(start = 22.dp, bottom = 6.dp))
-        LazyColumn {
-            items(q.tasks, key = { it.id }) { task ->
+        val row: @Composable (TaskItem) -> Unit = { task ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -376,7 +384,14 @@ private fun QuadrantBox(q: Quadrant, today: LocalDate, taskActions: TaskActions,
                         }
                     }
                 }
+        }
+        if (stacked) {
+            if (q.tasks.isEmpty()) {
+                Text("Nothing here", style = MaterialTheme.typography.labelMedium, color = Palette.TextTertiary, modifier = Modifier.padding(start = 22.dp, bottom = 4.dp))
             }
+            q.tasks.forEach { key(it.id) { row(it) } }
+        } else {
+            LazyColumn { items(q.tasks, key = { it.id }) { row(it) } }
         }
     }
 }
@@ -390,18 +405,22 @@ private val titleWidth = 132.dp
 /** Gantt-style timeline: a bar from each task's start date to its due date, or a dot on the due day. */
 @Composable
 fun TimelineView(tasks: List<TaskItem>, today: LocalDate, taskActions: TaskActions, bottomPadding: androidx.compose.ui.unit.Dp) {
+    io.github.ryr05.noctil.ui.CappedText(1.2f) { TimelineViewBody(tasks = tasks, today = today, taskActions = taskActions, bottomPadding = bottomPadding) }
+}
+
+@Composable
+private fun TimelineViewBody(tasks: List<TaskItem>, today: LocalDate, taskActions: TaskActions, bottomPadding: androidx.compose.ui.unit.Dp) {
     val dated = tasks.filter { !it.done && it.date != null }
         .sortedWith(compareBy({ it.startDate ?: it.date }, { it.date }))
     if (dated.isEmpty()) {
-        Column(Modifier.padding(start = 24.dp, top = 24.dp)) {
-            Text("Nothing on the timeline", style = MaterialTheme.typography.titleMedium, color = Palette.TextPrimary)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Tasks with a due date show here. Give a task a start date (open it, then Starts) to see it as a bar.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Palette.TextSecondary,
-            )
-        }
+        io.github.ryr05.noctil.ui.components.EmptyHint(
+            icon = androidx.compose.material.icons.Icons.Rounded.ViewTimeline,
+            title = "Nothing on the timeline",
+            body = "Tasks with a due date show here. Type a day range to see one as a bar.",
+            modifier = Modifier.padding(horizontal = 16.dp),
+            examples = listOf("Group project mon to fri", "Essay draft friday next week"),
+            onExample = taskActions.onQuickAdd,
+        )
         return
     }
     val first = minOf(today.minusDays(2), dated.minOf { it.startDate ?: it.date!! })

@@ -67,13 +67,17 @@ import io.github.ryr05.noctil.ui.theme.Palette
 private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releases/latest"
 
 private val typingTips = listOf(
-    "fri 5pm" to "Due Friday at 5:00 PM",
-    "tomorrow, tmrw, tonight" to "Due dates in plain words",
-    "next mon, dec 4, the 15th" to "Specific days",
-    "in 3 days, in 2 weeks" to "Relative dates",
-    "every monday, every weekday" to "Repeating tasks",
-    "every 3 days, monthly" to "More repeat patterns",
-    "!1  !2  !3" to "High, medium, low priority",
+    "fri 5pm, tomorrow 9am" to "Due day and time",
+    "tonight, tmrw, this weekend" to "Plain words work, even with typos",
+    "friday next week, next fri" to "A day in next week",
+    "dec 4, 11/20, the 15th" to "A specific date",
+    "in 3 days, in 2 hours, end of month" to "Relative dates and times",
+    "3-5pm, for 2 hours" to "Time with a length",
+    "mon to fri" to "A start and due day (shows as a bar)",
+    "half past 4, noon, 17:00" to "More ways to say a time",
+    "every monday, mondays, weekdays" to "Repeating tasks",
+    "every 3 days, biweekly, every 15th" to "More repeat patterns",
+    "!1 !2 !3, p1, !urgent" to "High, medium, low priority",
     "#exam" to "Add a tag (exams get a countdown)",
     "~Chemistry" to "Put it in a list (made if new)",
 )
@@ -204,13 +208,8 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
                     )
                     Spacer(Modifier.height(12.dp))
                     typingTips.forEach { (example, meaning) ->
-                        Row(Modifier.padding(vertical = 5.dp)) {
-                            Text(
-                                example,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Palette.Lavender,
-                                modifier = Modifier.width(150.dp),
-                            )
+                        Column(Modifier.padding(vertical = 5.dp)) {
+                            Text(example, style = MaterialTheme.typography.labelLarge, color = Palette.Lavender)
                             Text(meaning, style = MaterialTheme.typography.bodyMedium, color = Palette.TextPrimary)
                         }
                     }
@@ -263,20 +262,26 @@ private fun SettingRow(
     ) {
         Icon(icon, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(22.dp))
+        // With big text the button goes under the words instead of squeezing them.
+        val big = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f
+        val badge: @Composable (Modifier) -> Unit = { m ->
+            if (trailing != null) {
+                Text(
+                    text = trailing,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Palette.Lavender,
+                    modifier = m
+                        .background(Palette.Lavender.copy(alpha = 0.12f), CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
             Text(detail, style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
+            if (big) badge(Modifier.padding(top = 6.dp))
         }
-        if (trailing != null) {
-            Text(
-                text = trailing,
-                style = MaterialTheme.typography.labelMedium,
-                color = Palette.Lavender,
-                modifier = Modifier
-                    .background(Palette.Lavender.copy(alpha = 0.12f), CircleShape)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
+        if (!big) badge(Modifier.padding(start = 8.dp))
     }
 }
 

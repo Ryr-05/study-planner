@@ -166,6 +166,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var calendarDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var detailStack by rememberSaveable { mutableStateOf(listOf<Long>()) }
     var quickAddOpen by rememberSaveable { mutableStateOf(false) }
+    var quickAddText by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
     var editor by remember { mutableStateOf<Editor?>(null) }
@@ -269,6 +270,10 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             }
         },
         onOpen = { task -> detailStack = listOf(task.id) },
+        onQuickAdd = { example ->
+            quickAddText = example
+            quickAddOpen = true
+        },
         onMoveToTomorrow = { task ->
             val previousDate = task.date
             val previousReminder = task.reminder
@@ -449,7 +454,14 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                         if (it == Tab.Tasks && tab == Tab.Tasks) drawerOpen = true
                         tab = it
                     },
-                    onAdd = { if (tab == Tab.Habits) habitEditing = HabitEdit(null) else quickAddOpen = true },
+                    onAdd = {
+                        if (tab == Tab.Habits) {
+                            habitEditing = HabitEdit(null)
+                        } else {
+                            quickAddText = ""
+                            quickAddOpen = true
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
@@ -546,6 +558,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 snapshot = snapshot,
                 today = today,
                 onDismiss = { quickAddOpen = false },
+                initialText = quickAddText,
                 onSubmit = { parsed, listId ->
                     quickAddOpen = false
                     if (tab == Tab.Focus || tab == Tab.Me || tab == Tab.Habits) tab = Tab.Tasks

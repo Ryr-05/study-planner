@@ -173,6 +173,23 @@ fun TimeGrid(
     onOpenClass: (SchoolClass) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    io.github.ryr05.noctil.ui.CappedText(1.15f) { TimeGridBody(days = days, today = today, blocks = blocks, scroll = scroll, bottomPadding = bottomPadding, onSlotTap = onSlotTap, onMoveTask = onMoveTask, onOpenTask = onOpenTask, onOpenEvent = onOpenEvent, onOpenClass = onOpenClass, modifier = modifier) }
+}
+
+@Composable
+private fun TimeGridBody(
+    days: List<LocalDate>,
+    today: LocalDate,
+    blocks: Map<LocalDate, List<CalBlock>>,
+    scroll: ScrollState,
+    bottomPadding: Dp,
+    onSlotTap: (LocalDate, LocalTime) -> Unit,
+    onMoveTask: (TaskItem, LocalDate, LocalTime) -> Unit,
+    onOpenTask: (TaskItem) -> Unit,
+    onOpenEvent: (PhoneEvent) -> Unit,
+    onOpenClass: (SchoolClass) -> Unit,
+    modifier: Modifier,
+) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val is24h = remember { DateFormat.is24HourFormat(context) }
@@ -200,6 +217,8 @@ fun TimeGrid(
                                 LocalTime.of(h, 0).format(hourLabel),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Palette.TextTertiary,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.offset(y = (-7).dp).padding(start = 4.dp),
                             )
                         }

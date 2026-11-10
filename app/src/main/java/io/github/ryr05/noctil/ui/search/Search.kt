@@ -146,9 +146,5 @@ fun SearchOverlay(
 
 @Composable
 private fun Hint(title: String, body: String) {
-    Column(Modifier.padding(top = 24.dp, start = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Palette.TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text(body, style = MaterialTheme.typography.bodyMedium, color = Palette.TextSecondary)
-    }
+    io.github.ryr05.noctil.ui.components.EmptyHint(androidx.compose.material.icons.Icons.Rounded.Search, title, body)
 }

@@ -1,5 +1,6 @@
 package io.github.ryr05.noctil.ui.calendar
 
+import androidx.compose.material.icons.rounded.EventAvailable
 import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.Context
@@ -77,6 +78,7 @@ import io.github.ryr05.noctil.ui.components.timeFormat
 import io.github.ryr05.noctil.ui.components.topContentPadding
 import io.github.ryr05.noctil.ui.tasks.TaskActions
 import io.github.ryr05.noctil.ui.tasks.openTaskOrder
+import io.github.ryr05.noctil.ui.components.Segmented
 import io.github.ryr05.noctil.ui.theme.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -216,28 +218,7 @@ private fun Header(mode: CalMode, selected: LocalDate, today: LocalDate, actions
 
 @Composable
 private fun ModeSwitch(mode: CalMode, onMode: (CalMode) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(CircleShape).background(Palette.Surface).padding(4.dp),
-    ) {
-        CalMode.entries.forEach { m ->
-            val isSelected = m == mode
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp)
-                    .clip(CircleShape)
-                    .background(if (isSelected) Palette.SurfaceHigh else Color.Transparent)
-                    .selectable(selected = isSelected, role = Role.Tab) { onMode(m) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    m.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) Palette.TextPrimary else Palette.TextSecondary,
-                )
-            }
-        }
-    }
+    Segmented(CalMode.entries.map { it.label }, mode.ordinal, { onMode(CalMode.entries[it]) })
 }
 
 // ---------------- Month ----------------
@@ -298,11 +279,13 @@ private fun MonthView(
         }
         if (dayTasks.isEmpty() && agenda == 0) {
             item(key = "empty") {
-                Text(
-                    "Nothing planned. Tap + to add a task on this day.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Palette.TextSecondary,
-                    modifier = Modifier.padding(start = 4.dp),
+                io.github.ryr05.noctil.ui.components.EmptyHint(
+                    icon = Icons.Rounded.EventAvailable,
+                    title = "Nothing planned",
+                    body = "Tap + to add a task on this day, or tap an empty hour in Day or Week view.",
+                    modifier = Modifier.padding(top = 0.dp),
+                    examples = listOf("Study session 4pm for 2 hours", "Review notes 7pm"),
+                    onExample = taskActions.onQuickAdd,
                 )
             }
         } else {
@@ -392,6 +375,18 @@ fun MonthGrid(
     busyDays: Set<LocalDate>,
     onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
+) {
+    io.github.ryr05.noctil.ui.CappedText(1.25f) { MonthGridBody(month = month, today = today, selected = selected, busyDays = busyDays, onSelect = onSelect, modifier = modifier) }
+}
+
+@Composable
+private fun MonthGridBody(
+    month: YearMonth,
+    today: LocalDate,
+    selected: LocalDate,
+    busyDays: Set<LocalDate>,
+    onSelect: (LocalDate) -> Unit,
+    modifier: Modifier,
 ) {
     val locale = Locale.getDefault()
     val firstDayOfWeek = remember(locale) { WeekFields.of(locale).firstDayOfWeek }
@@ -487,6 +482,11 @@ private fun DayCell(
 
 @Composable
 private fun YearView(snapshot: Snapshot, today: LocalDate, selected: LocalDate, actions: CalendarActions) {
+    io.github.ryr05.noctil.ui.CappedText(1.2f) { YearViewBody(snapshot = snapshot, today = today, selected = selected, actions = actions) }
+}
+
+@Composable
+private fun YearViewBody(snapshot: Snapshot, today: LocalDate, selected: LocalDate, actions: CalendarActions) {
     val busy = remember(snapshot) { snapshot.tasks.filter { !it.done && it.date != null }.mapNotNull { it.date }.toSet() }
     val months = (1..12).map { YearMonth.of(selected.year, it) }
     LazyColumn(
@@ -612,6 +612,18 @@ private fun DayView(
 
 @Composable
 private fun WeekView(
+    snapshot: Snapshot,
+    today: LocalDate,
+    selected: LocalDate,
+    events: List<PhoneEvent>,
+    taskActions: TaskActions,
+    actions: CalendarActions,
+) {
+    io.github.ryr05.noctil.ui.CappedText(1.15f) { WeekViewBody(snapshot = snapshot, today = today, selected = selected, events = events, taskActions = taskActions, actions = actions) }
+}
+
+@Composable
+private fun WeekViewBody(
     snapshot: Snapshot,
     today: LocalDate,
     selected: LocalDate,

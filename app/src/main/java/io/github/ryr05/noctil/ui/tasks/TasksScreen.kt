@@ -1,5 +1,14 @@
 package io.github.ryr05.noctil.ui.tasks
 
+import io.github.ryr05.noctil.ui.components.EmptyHint
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,6 +56,7 @@ import io.github.ryr05.noctil.ui.components.SectionLabel
 import io.github.ryr05.noctil.ui.components.TaskRow
 import io.github.ryr05.noctil.ui.components.bottomContentPadding
 import io.github.ryr05.noctil.ui.components.topContentPadding
+import io.github.ryr05.noctil.ui.components.Segmented
 import io.github.ryr05.noctil.ui.theme.Palette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -61,6 +71,8 @@ data class TaskActions(
     val onMoveToTomorrow: (TaskItem) -> Unit,
     /** Long-press or tap while picking: adds or removes a task from the selection. */
     val onSelect: ((TaskItem) -> Unit)? = null,
+    /** Opens quick add with this text already typed (from the examples on empty screens). */
+    val onQuickAdd: (String) -> Unit = {},
 )
 
 @Composable
@@ -144,29 +156,17 @@ fun TasksScreen(
         }
 
         if (snapshot.loaded && sections.none { !it.collapsible }) {
-            item(key = "empty") { EmptyState(view) }
+            item(key = "empty") {
+                val tagName = (view as? TaskView.OfTag)?.let { v -> snapshot.tags.firstOrNull { it.id == v.id }?.name } ?: "tag"
+                EmptyState(view, tagName, actions.onQuickAdd)
+            }
         }
     }
 }
 
 @Composable
 private fun LayoutSwitch(layout: TaskLayout, onLayout: (TaskLayout) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Palette.Surface).padding(4.dp)) {
-        TaskLayout.entries.forEach { l ->
-            val selected = l == layout
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (selected) Palette.SurfaceHigh else androidx.compose.ui.graphics.Color.Transparent)
-                    .clickable(onClickLabel = "Show as ${l.label}", role = Role.Tab) { onLayout(l) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(l.label, style = MaterialTheme.typography.labelLarge, color = if (selected) Palette.TextPrimary else Palette.TextSecondary)
-            }
-        }
-    }
+    Segmented(TaskLayout.entries.map { it.label }, layout.ordinal, { onLayout(TaskLayout.entries[it]) }, modifier, minHeight = 36.dp)
 }
 
 @Composable
@@ -295,22 +295,46 @@ private fun LazyListScope.renderSection(
 }
 
 @Composable
-private fun EmptyState(view: TaskView) {
-    val (title, body) = when (view) {
-        TaskView.Today -> "You're clear for today" to "Tap + to add a task. Try \"essay fri 5pm !1\"."
-        TaskView.Next7 -> "A quiet week" to "Tasks with dates in the next 7 days show up here."
-        TaskView.High -> "No high-priority tasks" to "Add !1 when you type a task to mark it high priority."
-        TaskView.Completed -> "Nothing finished yet" to "Tasks you finish are kept here."
-        TaskView.All -> "No open tasks" to "Tap + to add your first task."
-        TaskView.Inbox -> "Inbox is empty" to "Tasks without a list land here."
-        is TaskView.OfList -> "This list is empty" to "Tap + to add a task to this list."
-        is TaskView.OfTag -> "No open tasks with this tag" to "Type #tagname when adding a task to tag it."
+private fun EmptyState(view: TaskView, tag: String, onExample: (String) -> Unit) {
+    data class Empty(val icon: ImageVector, val title: String, val body: String, val examples: List<String>)
+    val e = when (view) {
+        TaskView.Today -> Empty(
+            Icons.Rounded.WbTwilight, "You're clear for today",
+            "Tap + and type a task the way you'd say it. Dates, times and priority are picked up for you.",
+            listOf("Essay draft 5pm !1", "Study for quiz tonight", "Lab report tomorrow 9am"),
+        )
+        TaskView.Next7 -> Empty(
+            Icons.Rounded.DateRange, "A quiet week",
+            "Tasks due in the next 7 days show up here.",
+            listOf("Quiz friday 9am #exam", "Group project mon to fri", "Return books in 3 days"),
+        )
+        TaskView.High -> Empty(
+            Icons.Rounded.Flag, "No high-priority tasks",
+            "Add !1 when you type a task to mark it high priority.",
+            listOf("Finish essay fri !1", "Pay school fees !urgent"),
+        )
+        TaskView.Completed -> Empty(
+            Icons.Rounded.TaskAlt, "Nothing finished yet",
+            "Tap the circle next to a task to finish it. Finished tasks wait here.",
+            emptyList(),
+        )
+        TaskView.All, TaskView.Inbox -> Empty(
+            Icons.Rounded.Inbox, if (view == TaskView.All) "No open tasks" else "Inbox is empty",
+            "Tap + to add your first task. You can type it all in one line.",
+            listOf("Essay draft fri 5pm !1", "Gym every mon and wed 6pm", "Chem midterm dec 4 #exam"),
+        )
+        is TaskView.OfList -> Empty(
+            Icons.Rounded.FolderOpen, "This list is empty",
+            "Tasks you add here go straight into this list.",
+            listOf("Read chapter 4 tomorrow", "Problem set friday next week 5pm"),
+        )
+        is TaskView.OfTag -> Empty(
+            Icons.Rounded.Sell, "No open tasks with this tag",
+            "Type #$tag when adding a task to tag it.",
+            listOf("Revise notes fri #$tag"),
+        )
     }
-    Column(Modifier.padding(top = 40.dp, start = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Palette.TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text(body, style = MaterialTheme.typography.bodyMedium, color = Palette.TextSecondary)
-    }
+    EmptyHint(e.icon, e.title, e.body, examples = e.examples, onExample = onExample)
 }
 
 @Composable

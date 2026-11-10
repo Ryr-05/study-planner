@@ -121,6 +121,8 @@ class Repository(
                         priority = parsed.priority.value,
                         recurrence = parsed.recurrence?.encode(),
                         reminder = if (parsed.date != null) 0 else null,
+                        durationMinutes = parsed.durationMinutes,
+                        startDate = parsed.startDate?.toEpochDay(),
                         sortOrder = db.tasks().maxSortOrder() + 1,
                         createdAt = now,
                         updatedAt = now,
