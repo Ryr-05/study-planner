@@ -105,7 +105,7 @@ data class HabitActions(
 private val suggestions = listOf("Read 20 minutes" to 1, "Drink water" to 8, "Exercise" to 1, "Review notes" to 1, "Sleep by 11" to 1)
 
 @Composable
-fun HabitsScreen(snapshot: Snapshot, today: LocalDate, actions: HabitActions) {
+fun HabitsScreen(snapshot: Snapshot, today: LocalDate, actions: HabitActions, onOpenMe: () -> Unit = {}) {
     val due = snapshot.habits.filter { it.isDue(today) }
     val doneToday = due.count { it.isDone(today) }
     LazyColumn(
@@ -124,7 +124,7 @@ fun HabitsScreen(snapshot: Snapshot, today: LocalDate, actions: HabitActions) {
                     },
                     modifier = Modifier.weight(1f),
                 )
-                RoundIconButton(Icons.Rounded.Add, "New habit", onClick = actions.onNew)
+                io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
             }
         }
         if (snapshot.loaded && snapshot.habits.isEmpty()) {

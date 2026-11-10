@@ -71,6 +71,7 @@ fun TasksScreen(
     actions: TaskActions,
     onOpenLists: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenMe: () -> Unit = {},
     layout: TaskLayout = TaskLayout.List,
     onLayout: (TaskLayout) -> Unit = {},
     selection: Set<Long>? = null,
@@ -83,7 +84,7 @@ fun TasksScreen(
     if (layout != TaskLayout.List) {
         Column(Modifier.fillMaxSize().padding(top = topContentPadding())) {
             Column(Modifier.padding(horizontal = 20.dp)) {
-                Header(view, snapshot, today, onOpenLists, onOpenSearch)
+                Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
                 LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp, bottom = 12.dp))
             }
             val tasks = tasksInView(view, snapshot, today)
@@ -114,7 +115,7 @@ fun TasksScreen(
         ),
     ) {
         item(key = "header") {
-            Header(view, snapshot, today, onOpenLists, onOpenSearch)
+            Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
         }
         item(key = "layouts") {
             LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp))
@@ -175,6 +176,7 @@ private fun Header(
     today: LocalDate,
     onOpenLists: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenMe: () -> Unit,
 ) {
     val count = openCount(view, snapshot, today)
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -215,6 +217,8 @@ private fun Header(
             }
         }
         RoundIconButton(Icons.Rounded.Search, "Search tasks", onClick = onOpenSearch)
+        Spacer(Modifier.width(8.dp))
+        io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
     }
 }
 

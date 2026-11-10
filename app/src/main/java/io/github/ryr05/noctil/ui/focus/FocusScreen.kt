@@ -78,7 +78,7 @@ import java.time.ZoneId
  * (and as a Live Update on Android 16), and an alarm tells you when the session is done.
  */
 @Composable
-fun FocusScreen(snapshot: Snapshot, today: LocalDate) {
+fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {}) {
     val context = LocalContext.current
     val state by FocusEngine.state.collectAsState()
     val now by produceState(System.currentTimeMillis(), state.running) {
@@ -99,7 +99,12 @@ fun FocusScreen(snapshot: Snapshot, today: LocalDate) {
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = topContentPadding(), bottom = bottomContentPadding()),
     ) {
-        item(key = "title") { ScreenTitle(title = "Focus", overline = focusSummary(todaySessions, todayMinutes)) }
+        item(key = "title") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ScreenTitle(title = "Focus", overline = focusSummary(todaySessions, todayMinutes), modifier = Modifier.weight(1f))
+                io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
+            }
+        }
         item(key = "modes") {
             Spacer(Modifier.height(20.dp))
             ModePicker(state) { FocusEngine.select(context, it) }

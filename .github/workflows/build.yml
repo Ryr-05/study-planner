@@ -52,7 +52,15 @@ jobs:
           fi
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest -Proborazzi.test.verify=false
+
+      - name: Render screenshots (normal and large text)
+        run: ./gradlew recordRoborazziDebug --tests '*ScreenshotTest*'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots
+          path: app/build/outputs/roborazzi/
 
       - name: Print database schema
         # Room's own CREATE statements, to check hand-written migrations against.

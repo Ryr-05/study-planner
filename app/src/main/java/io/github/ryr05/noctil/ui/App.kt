@@ -156,6 +156,11 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     }
 
     var tab by rememberSaveable { mutableStateOf(Tab.Tasks) }
+    var tabBeforeMe by rememberSaveable { mutableStateOf(Tab.Tasks) }
+    val openMe = {
+        if (tab != Tab.Me) tabBeforeMe = tab
+        tab = Tab.Me
+    }
     var viewKey by rememberSaveable { mutableStateOf(TaskView.Today.key) }
     val view = TaskView.fromKey(viewKey)
     var calendarDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
@@ -351,6 +356,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             syncOpen -> syncOpen = false
             searchOpen -> searchOpen = false
             drawerOpen -> drawerOpen = false
+            tab == Tab.Me -> tab = tabBeforeMe
             tab != Tab.Tasks -> tab = Tab.Tasks
             else -> viewKey = TaskView.Today.key
         }
@@ -370,6 +376,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                             actions = taskActions,
                             onOpenLists = { drawerOpen = true },
                             onOpenSearch = { searchOpen = true },
+                            onOpenMe = openMe,
                             layout = layout,
                             onLayout = { layout = it },
                             selection = selection,
@@ -381,6 +388,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                             selected = calendarDay,
                             mode = calMode,
                             taskActions = taskActions,
+                            onOpenMe = openMe,
                             actions = CalendarActions(
                                 onSelect = { calendarDay = it },
                                 onMode = { calMode = it },
@@ -403,6 +411,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                         Tab.Habits -> HabitsScreen(
                             snapshot = snapshot,
                             today = today,
+                            onOpenMe = openMe,
                             actions = HabitActions(
                                 onTap = { habit, day -> repo.tapHabit(habit.id, day) },
                                 onOpen = { habitOpenId = it.id },
@@ -412,11 +421,12 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                                 },
                             ),
                         )
-                        Tab.Focus -> FocusScreen(snapshot, today)
+                        Tab.Focus -> FocusScreen(snapshot, today, onOpenMe = openMe)
                         Tab.Me -> MeScreen(
                             askedForNotificationsBefore = repo.askedForNotifications,
                             onAskNotifications = { askForNotificationsOnce() },
                             onOpenStats = { statsOpen = true },
+                            onBack = { tab = tabBeforeMe },
                         )
                     }
                 }
@@ -432,23 +442,19 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             } else {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                GlassTabBar(
+            if (tab != Tab.Me) {
+                BottomBar(
                     selected = tab,
                     onSelect = {
                         if (it == Tab.Tasks && tab == Tab.Tasks) drawerOpen = true
                         tab = it
                     },
-                    modifier = Modifier.weight(1f),
+                    onAdd = { if (tab == Tab.Habits) habitEditing = HabitEdit(null) else quickAddOpen = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 )
-                AddButton(onClick = { if (tab == Tab.Habits) habitEditing = HabitEdit(null) else quickAddOpen = true })
             }
             }
 

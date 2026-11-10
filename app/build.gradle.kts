@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.roborazzi)
 }
 
 // CI passes these in so every build gets a higher version number,
@@ -102,6 +103,11 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        // Screenshot tests render real resources (fonts, icons) on the build machine.
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 // Print a one-line summary of the unit tests in the CI log.
@@ -157,4 +163,10 @@ dependencies {
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

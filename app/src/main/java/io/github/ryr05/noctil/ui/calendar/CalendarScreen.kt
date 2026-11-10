@@ -120,12 +120,13 @@ fun CalendarScreen(
     mode: CalMode,
     taskActions: TaskActions,
     actions: CalendarActions,
+    onOpenMe: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val events = rememberPhoneEvents(context, mode, selected)
 
     Column(Modifier.fillMaxSize().padding(top = topContentPadding())) {
-        Header(mode, selected, today, actions, Modifier.padding(horizontal = 20.dp))
+        Header(mode, selected, today, actions, onOpenMe, Modifier.padding(horizontal = 20.dp))
         when (mode) {
             CalMode.Month -> MonthView(snapshot, today, selected, events, taskActions, actions)
             CalMode.Year -> YearView(snapshot, today, selected, actions)
@@ -139,7 +140,10 @@ fun CalendarScreen(
 @Composable
 private fun rememberPhoneEvents(context: Context, mode: CalMode, selected: LocalDate): List<PhoneEvent> {
     val version by CalendarPrefs.version.collectAsState()
-    val linkFlow = remember { (context.applicationContext as NoctilApplication).repository.db.calendarLinks().observeEventIds() }
+    val linkFlow = remember {
+        (context.applicationContext as? NoctilApplication)?.repository?.db?.calendarLinks()?.observeEventIds()
+            ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
     val exported by linkFlow.collectAsState(emptyList())
     val (from, until) = when (mode) {
         CalMode.Day -> selected to selected.plusDays(1)
@@ -162,7 +166,7 @@ private fun rememberPhoneEvents(context: Context, mode: CalMode, selected: Local
 }
 
 @Composable
-private fun Header(mode: CalMode, selected: LocalDate, today: LocalDate, actions: CalendarActions, modifier: Modifier) {
+private fun Header(mode: CalMode, selected: LocalDate, today: LocalDate, actions: CalendarActions, onOpenMe: () -> Unit, modifier: Modifier) {
     val (overline, title) = when (mode) {
         CalMode.Day -> (if (selected == today) "Today" else selected.dayOfWeek.getDisplayName(JavaTextStyle.FULL, Locale.getDefault())) to
             selected.format(DateTimeFormatter.ofPattern("MMMM d"))
@@ -190,16 +194,16 @@ private fun Header(mode: CalMode, selected: LocalDate, today: LocalDate, actions
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(overline, style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary)
-                Text(title, style = MaterialTheme.typography.displaySmall, color = Palette.TextPrimary, maxLines = 1)
+                Text(title, style = MaterialTheme.typography.displaySmall, color = Palette.TextPrimary)
             }
-            RoundIconButton(Icons.Rounded.ChevronLeft, "Previous ${mode.label.lowercase()}") { step(false) }
-            Spacer(Modifier.width(8.dp))
-            RoundIconButton(Icons.Rounded.ChevronRight, "Next ${mode.label.lowercase()}") { step(true) }
+            io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
         }
         Spacer(Modifier.height(14.dp))
         ModeSwitch(mode, actions.onMode)
         Spacer(Modifier.height(10.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            item { RoundIconButton(Icons.Rounded.ChevronLeft, "Previous ${mode.label.lowercase()}") { step(false) } }
+            item { RoundIconButton(Icons.Rounded.ChevronRight, "Next ${mode.label.lowercase()}") { step(true) } }
             if (selected != today) {
                 item { Pill("Today", selected = false, leading = Icons.Rounded.Today) { actions.onSelect(today) } }
             }

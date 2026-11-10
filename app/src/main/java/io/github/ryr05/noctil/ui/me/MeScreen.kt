@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -78,7 +79,7 @@ private val typingTips = listOf(
 )
 
 @Composable
-fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Unit, onOpenStats: () -> Unit) {
+fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Unit, onOpenStats: () -> Unit, onBack: () -> Unit = {}) {
     val backup = rememberBackupController()
     val context = LocalContext.current
     val version = remember(context) { appVersion(context) }
@@ -107,7 +108,15 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
             bottom = bottomContentPadding(),
         ),
     ) {
-        item(key = "title") { ScreenTitle(title = "Me") }
+        item(key = "title") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                io.github.ryr05.noctil.ui.components.RoundIconButton(
+                    androidx.compose.material.icons.Icons.AutoMirrored.Rounded.ArrowBack, "Back", onClick = onBack,
+                )
+                Spacer(Modifier.width(14.dp))
+                ScreenTitle(title = "Me")
+            }
+        }
         item(key = "profile") { AccountCard(Modifier.padding(top = 20.dp)) }
 
         item(key = "settings-label") { SectionLabel("Settings") }
