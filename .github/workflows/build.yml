@@ -46,7 +46,7 @@ jobs:
 
       - name: Print database schema
         # Room's own CREATE statements, to check hand-written migrations against.
-        run: grep -rhoE 'CREATE TABLE IF NOT EXISTS [^"]*' app/build/generated/ksp/debug | sort -u || true
+        run: grep -rhoE 'CREATE (TABLE|INDEX) IF NOT EXISTS [^"]*' app/build/generated/ksp/debug | sort -u || true
 
       - name: Build release APK
         env:

@@ -114,6 +114,37 @@ data class CalendarLinkEntity(
     val syncedAt: Long,
 )
 
+/** A finished focus session or stopwatch run, for statistics. */
+@Entity(tableName = "focus_sessions", indices = [Index("startedAt")])
+data class FocusSessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val startedAt: Long,
+    val minutes: Int,
+    val taskId: Long? = null,
+    val kind: String = "focus",
+)
+
+@Entity(tableName = "habits")
+data class HabitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val color: Int,
+    /** Which weekdays it's due. Bit 0 is Monday, bit 6 is Sunday. 127 is every day. */
+    val days: Int = 127,
+    /** How many check-ins make a day count, like 8 glasses of water. */
+    val goal: Int = 1,
+    /** Minutes after midnight for a daily reminder, or null for none. */
+    val reminderMinute: Int? = null,
+    val sortOrder: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
+    val archived: Boolean = false,
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/** How many times a habit was checked on a day (days since 1970-01-01). */
+@Entity(tableName = "habit_checks", primaryKeys = ["habitId", "day"])
+data class HabitCheckEntity(val habitId: Long, val day: Long, val count: Int)
+
 @Entity(tableName = "task_tags", primaryKeys = ["taskId", "tagId"], indices = [Index("tagId")])
 data class TaskTagEntity(val taskId: Long, val tagId: Long)
 
@@ -279,13 +310,100 @@ interface CalendarLinkDao {
     suspend fun clear()
 }
 
+@Dao
+interface FocusDao {
+    @Query("SELECT * FROM focus_sessions ORDER BY startedAt")
+    fun observeAll(): Flow<List<FocusSessionEntity>>
+
+    @Insert
+    suspend fun insert(session: FocusSessionEntity): Long
+}
+
+@Dao
+interface HabitDao {
+    @Query("SELECT * FROM habits WHERE archived = 0 ORDER BY sortOrder, id")
+    fun observeHabits(): Flow<List<HabitEntity>>
+
+    @Query("SELECT * FROM habit_checks")
+    fun observeChecks(): Flow<List<HabitCheckEntity>>
+
+    @Query("SELECT * FROM habits WHERE archived = 0")
+    suspend fun allHabits(): List<HabitEntity>
+
+    @Query("SELECT * FROM habits WHERE id = :id")
+    suspend fun get(id: Long): HabitEntity?
+
+    @Query("SELECT COUNT(*) FROM habits")
+    suspend fun count(): Int
+
+    @Query("SELECT * FROM habit_checks WHERE habitId = :habitId AND day = :day")
+    suspend fun check(habitId: Long, day: Long): HabitCheckEntity?
+
+    @Insert
+    suspend fun insert(habit: HabitEntity): Long
+
+    @Update
+    suspend fun update(habit: HabitEntity)
+
+    @Query("DELETE FROM habits WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM habit_checks WHERE habitId = :habitId")
+    suspend fun deleteChecks(habitId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCheck(check: HabitCheckEntity)
+
+    @Query("DELETE FROM habit_checks WHERE habitId = :habitId AND day = :day")
+    suspend fun deleteCheck(habitId: Long, day: Long)
+}
+
+/** Whole-database reads and writes for backup and restore. */
+@Dao
+interface BackupDao {
+    @Query("SELECT * FROM folders") suspend fun folders(): List<FolderEntity>
+    @Query("SELECT * FROM lists") suspend fun lists(): List<ListEntity>
+    @Query("SELECT * FROM tasks WHERE deleted = 0") suspend fun tasks(): List<TaskEntity>
+    @Query("SELECT * FROM checklist") suspend fun checklist(): List<ChecklistEntity>
+    @Query("SELECT * FROM tags") suspend fun tags(): List<TagEntity>
+    @Query("SELECT * FROM task_tags") suspend fun taskTags(): List<TaskTagEntity>
+    @Query("SELECT * FROM classes") suspend fun classes(): List<ClassEntity>
+    @Query("SELECT * FROM habits") suspend fun habits(): List<HabitEntity>
+    @Query("SELECT * FROM habit_checks") suspend fun habitChecks(): List<HabitCheckEntity>
+    @Query("SELECT * FROM focus_sessions") suspend fun focusSessions(): List<FocusSessionEntity>
+
+    @Insert suspend fun insertFolders(items: List<FolderEntity>)
+    @Insert suspend fun insertLists(items: List<ListEntity>)
+    @Insert suspend fun insertTasks(items: List<TaskEntity>)
+    @Insert suspend fun insertChecklist(items: List<ChecklistEntity>)
+    @Insert suspend fun insertTags(items: List<TagEntity>)
+    @Insert suspend fun insertTaskTags(items: List<TaskTagEntity>)
+    @Insert suspend fun insertClasses(items: List<ClassEntity>)
+    @Insert suspend fun insertHabits(items: List<HabitEntity>)
+    @Insert suspend fun insertHabitChecks(items: List<HabitCheckEntity>)
+    @Insert suspend fun insertFocusSessions(items: List<FocusSessionEntity>)
+
+    @Query("DELETE FROM folders") suspend fun clearFolders()
+    @Query("DELETE FROM lists") suspend fun clearLists()
+    @Query("DELETE FROM tasks") suspend fun clearTasks()
+    @Query("DELETE FROM checklist") suspend fun clearChecklist()
+    @Query("DELETE FROM tags") suspend fun clearTags()
+    @Query("DELETE FROM task_tags") suspend fun clearTaskTags()
+    @Query("DELETE FROM classes") suspend fun clearClasses()
+    @Query("DELETE FROM habits") suspend fun clearHabits()
+    @Query("DELETE FROM habit_checks") suspend fun clearHabitChecks()
+    @Query("DELETE FROM focus_sessions") suspend fun clearFocusSessions()
+    @Query("DELETE FROM calendar_links") suspend fun clearCalendarLinks()
+}
+
 @Database(
     entities = [
         FolderEntity::class, ListEntity::class, TaskEntity::class,
         ChecklistEntity::class, TagEntity::class, TaskTagEntity::class,
         ClassEntity::class, CalendarLinkEntity::class,
+        FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -295,11 +413,14 @@ abstract class NoctilDatabase : RoomDatabase() {
     abstract fun tags(): TagDao
     abstract fun classes(): ClassDao
     abstract fun calendarLinks(): CalendarLinkDao
+    abstract fun focus(): FocusDao
+    abstract fun habits(): HabitDao
+    abstract fun backup(): BackupDao
 
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }
@@ -322,6 +443,27 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
             "CREATE TABLE IF NOT EXISTS `calendar_links` (`taskId` INTEGER NOT NULL, `calendarId` INTEGER NOT NULL, " +
                 "`eventId` INTEGER NOT NULL, `title` TEXT NOT NULL, `start` INTEGER NOT NULL, `end` INTEGER NOT NULL, " +
                 "`allDay` INTEGER NOT NULL, `syncedAt` INTEGER NOT NULL, PRIMARY KEY(`taskId`))",
+        )
+    }
+}
+
+/** Version 2 to 3 (Phases 4 and 5): focus sessions, habits and habit check-ins. Existing data is kept. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `focus_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`startedAt` INTEGER NOT NULL, `minutes` INTEGER NOT NULL, `taskId` INTEGER, `kind` TEXT NOT NULL)",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_focus_sessions_startedAt` ON `focus_sessions` (`startedAt`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `habits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, " +
+                "`color` INTEGER NOT NULL, `days` INTEGER NOT NULL, `goal` INTEGER NOT NULL, `reminderMinute` INTEGER, " +
+                "`sortOrder` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `archived` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `habit_checks` (`habitId` INTEGER NOT NULL, `day` INTEGER NOT NULL, " +
+                "`count` INTEGER NOT NULL, PRIMARY KEY(`habitId`, `day`))",
         )
     }
 }
