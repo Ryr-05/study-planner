@@ -41,6 +41,16 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
 
+      - name: Add Firebase config
+        if: github.event_name != 'pull_request'
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+            echo "Firebase config added: cloud sync is on in this build."
+          fi
+
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
 

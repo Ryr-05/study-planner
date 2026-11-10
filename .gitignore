@@ -19,3 +19,6 @@ captures/
 *.p12
 *.pem
 keystore.properties
+
+# Firebase config: kept as a GitHub secret, never committed
+google-services.json

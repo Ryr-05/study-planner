@@ -145,6 +145,17 @@ data class HabitEntity(
 @Entity(tableName = "habit_checks", primaryKeys = ["habitId", "day"])
 data class HabitCheckEntity(val habitId: Long, val day: Long, val count: Int)
 
+/**
+ * Pairs a local row with its copy in the cloud, plus a fingerprint of what was last synced,
+ * so sync only sends rows that really changed. localKey is the row id, or "a:b" for two-part keys.
+ */
+@Entity(
+    tableName = "sync_map",
+    primaryKeys = ["tableName", "localKey"],
+    indices = [Index(value = ["tableName", "remoteId"])],
+)
+data class SyncMapEntity(val tableName: String, val localKey: String, val remoteId: String, val hash: Int)
+
 @Entity(tableName = "task_tags", primaryKeys = ["taskId", "tagId"], indices = [Index("tagId")])
 data class TaskTagEntity(val taskId: Long, val tagId: Long)
 
@@ -396,14 +407,79 @@ interface BackupDao {
     @Query("DELETE FROM calendar_links") suspend fun clearCalendarLinks()
 }
 
+@Dao
+interface SyncDao {
+    @Query("SELECT * FROM sync_map WHERE tableName = :table")
+    suspend fun maps(table: String): List<SyncMapEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putMap(map: SyncMapEntity)
+
+    @Query("DELETE FROM sync_map WHERE tableName = :table AND localKey = :localKey")
+    suspend fun deleteMap(table: String, localKey: String)
+
+    @Query("DELETE FROM sync_map")
+    suspend fun clearMaps()
+
+    @Query("SELECT * FROM tasks WHERE deleted = 0") suspend fun liveTasks(): List<TaskEntity>
+    @Query("SELECT * FROM tasks WHERE id = :id") suspend fun task(id: Long): TaskEntity?
+    @Query("SELECT * FROM lists WHERE id = :id") suspend fun list(id: Long): ListEntity?
+    @Query("SELECT * FROM folders WHERE id = :id") suspend fun folder(id: Long): FolderEntity?
+    @Query("SELECT * FROM tags WHERE id = :id") suspend fun tag(id: Long): TagEntity?
+    @Query("SELECT * FROM checklist WHERE id = :id") suspend fun checklistItem(id: Long): ChecklistEntity?
+    @Query("SELECT * FROM classes WHERE id = :id") suspend fun schoolClass(id: Long): ClassEntity?
+    @Query("SELECT * FROM habits WHERE id = :id") suspend fun habit(id: Long): HabitEntity?
+    @Query("SELECT * FROM focus_sessions WHERE id = :id") suspend fun focus(id: Long): FocusSessionEntity?
+
+    @Insert suspend fun insertFolder(e: FolderEntity): Long
+    @Update suspend fun updateFolder(e: FolderEntity)
+    @Query("DELETE FROM folders WHERE id = :id") suspend fun deleteFolder(id: Long)
+
+    @Insert suspend fun insertList(e: ListEntity): Long
+    @Update suspend fun updateList(e: ListEntity)
+    @Query("DELETE FROM lists WHERE id = :id") suspend fun deleteList(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertTag(e: TagEntity): Long
+    @Update suspend fun updateTag(e: TagEntity)
+    @Query("DELETE FROM tags WHERE id = :id") suspend fun deleteTag(id: Long)
+    @Query("SELECT * FROM tags WHERE LOWER(name) = LOWER(:name) LIMIT 1") suspend fun tagByName(name: String): TagEntity?
+
+    @Insert suspend fun insertTask(e: TaskEntity): Long
+    @Update suspend fun updateTask(e: TaskEntity)
+    @Query("UPDATE tasks SET deleted = 1 WHERE id = :id") suspend fun softDeleteTask(id: Long)
+
+    @Insert suspend fun insertChecklist(e: ChecklistEntity): Long
+    @Update suspend fun updateChecklist(e: ChecklistEntity)
+    @Query("DELETE FROM checklist WHERE id = :id") suspend fun deleteChecklist(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertTaskTag(e: TaskTagEntity)
+    @Query("DELETE FROM task_tags WHERE taskId = :taskId AND tagId = :tagId") suspend fun deleteTaskTag(taskId: Long, tagId: Long)
+
+    @Insert suspend fun insertClass(e: ClassEntity): Long
+    @Update suspend fun updateClass(e: ClassEntity)
+    @Query("DELETE FROM classes WHERE id = :id") suspend fun deleteClass(id: Long)
+
+    @Insert suspend fun insertHabit(e: HabitEntity): Long
+    @Update suspend fun updateHabit(e: HabitEntity)
+    @Query("DELETE FROM habits WHERE id = :id") suspend fun deleteHabit(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putHabitCheck(e: HabitCheckEntity)
+    @Query("DELETE FROM habit_checks WHERE habitId = :habitId AND day = :day") suspend fun deleteHabitCheck(habitId: Long, day: Long)
+
+    @Insert suspend fun insertFocus(e: FocusSessionEntity): Long
+    @Update suspend fun updateFocus(e: FocusSessionEntity)
+    @Query("DELETE FROM focus_sessions WHERE id = :id") suspend fun deleteFocus(id: Long)
+}
+
 @Database(
     entities = [
         FolderEntity::class, ListEntity::class, TaskEntity::class,
         ChecklistEntity::class, TagEntity::class, TaskTagEntity::class,
         ClassEntity::class, CalendarLinkEntity::class,
         FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
+        SyncMapEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -416,11 +492,12 @@ abstract class NoctilDatabase : RoomDatabase() {
     abstract fun focus(): FocusDao
     abstract fun habits(): HabitDao
     abstract fun backup(): BackupDao
+    abstract fun sync(): SyncDao
 
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }
@@ -465,5 +542,16 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
             "CREATE TABLE IF NOT EXISTS `habit_checks` (`habitId` INTEGER NOT NULL, `day` INTEGER NOT NULL, " +
                 "`count` INTEGER NOT NULL, PRIMARY KEY(`habitId`, `day`))",
         )
+    }
+}
+
+/** Version 3 to 4: the table that pairs local rows with their cloud copies. Existing data is kept. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sync_map` (`tableName` TEXT NOT NULL, `localKey` TEXT NOT NULL, " +
+                "`remoteId` TEXT NOT NULL, `hash` INTEGER NOT NULL, PRIMARY KEY(`tableName`, `localKey`))",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_map_tableName_remoteId` ON `sync_map` (`tableName`, `remoteId`)")
     }
 }
