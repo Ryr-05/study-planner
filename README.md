@@ -31,8 +31,11 @@ You can also open the app, go to **Me > Check for updates**.
 ## What works right now
 
 **Type tasks the way you'd say them.** Tap **+** and write something like
-`chem lab fri 5pm !1 #lab ~Chemistry every monday`. Noctil picks out the date, time,
-priority, tag, list and repeat, and highlights them as you type.
+`chem lab friday next week 3-5pm !1 #lab ~Chemistry`. Noctil picks out the date, time,
+length, priority, tag, list and repeat, and highlights them as you type. It understands
+typos (tommorow, wensday), `mon to fri`, `in 2 hours`, `end of month`, `half past 4`,
+`11/20`, `every 15th`, `mondays`, `for 45 min`, `!alarm` and much more. Empty screens
+show tappable examples to get you started.
 
 | Area | What you can do |
 |---|---|
@@ -40,6 +43,8 @@ priority, tag, list and repeat, and highlights them as you type.
 | Lists | Lists for each class, folders to group them, plus Today, Next 7 days, High priority, All, Completed and Inbox |
 | Repeat | Daily, weekdays, weekly on chosen days, every few days, monthly, yearly |
 | Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Optional "keep reminding until done". Survives restarts |
+| Alarms | Any task can ring like the Clock app: full screen over the lockscreen, sound until you stop it, Done or Snooze. Pick a phone alarm tone or add your own MP3. Settings in Me |
+| Big text | Works with the phone's largest text size: text grows, layouts stay usable |
 | Places | Save a spot like your campus, then get reminded when you arrive. No map account needed |
 | Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change. Long-press to select many and finish, reschedule, move, tag or delete them together |
 | Views | List, Board (To Do, Doing, your own columns, Done; drag cards between them), Eisenhower Matrix, and Timeline (bars from start to due date) |

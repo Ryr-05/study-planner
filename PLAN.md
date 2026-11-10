@@ -129,6 +129,13 @@ Every phase ends with a new APK you install and test on your phone.
 - "Keep reminding me" alarm that repeats until you deal with the task
 - Location reminders
 
+### Polish (after Phase 6) — done
+- Layouts that hold up with the phone's biggest text size (screenshot-tested at 2x)
+- Centered + button; Me opens from the profile button on each screen
+- Full-screen alarms with phone tones or your own MP3s
+- Much smarter typing (next-week days, ranges, lengths, typos, numeric dates, spoken times)
+- Empty screens with tappable example tasks
+
 ### Phase 7 — Sharing
 - Share a list by link (group projects, study groups)
 - Assign tasks to members, see group progress

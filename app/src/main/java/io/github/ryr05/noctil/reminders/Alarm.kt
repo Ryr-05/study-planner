@@ -130,11 +130,9 @@ class AlarmService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_SNOOZE -> {
+                val minutes = AlarmPrefs.snoozeMinutes(this)
                 finishWith { app ->
-                    if (id >= 0) {
-                        val minutes = AlarmPrefs.snoozeMinutes(this)
-                        app.scheduler.scheduleAt(id, System.currentTimeMillis() + minutes * 60_000L, alarmClock = true)
-                    }
+                    if (id >= 0) app.scheduler.scheduleAt(id, System.currentTimeMillis() + minutes * 60_000L, alarmClock = true)
                 }
                 return START_NOT_STICKY
             }

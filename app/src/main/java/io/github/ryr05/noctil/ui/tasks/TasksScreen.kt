@@ -63,6 +63,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 private val headerDate = DateTimeFormatter.ofPattern("EEEE, MMMM d")
+private val shortHeaderDate = DateTimeFormatter.ofPattern("EEE, MMM d")
 private val shortDate = DateTimeFormatter.ofPattern("EEE, MMM d")
 
 data class TaskActions(
@@ -182,7 +183,12 @@ private fun Header(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = if (view == TaskView.Today) today.format(headerDate) else countText(count),
+                text = if (view == TaskView.Today) {
+                    // With big text the long date would wrap onto two lines.
+                    today.format(if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) shortHeaderDate else headerDate)
+                } else {
+                    countText(count)
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = Palette.TextSecondary,
             )
