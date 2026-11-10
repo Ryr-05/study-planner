@@ -38,7 +38,7 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.Icon
@@ -163,7 +163,7 @@ private fun DrawerContent(
             Row(Modifier.padding(start = 12.dp, top = 20.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Your lists", style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary, modifier = Modifier.weight(1f))
                 SmallIconButton(Icons.Rounded.CreateNewFolder, "New folder", onClick = actions.onNewFolder)
-                SmallIconButton(Icons.Rounded.PlaylistAdd, "New list", onClick = actions.onNewList)
+                SmallIconButton(Icons.AutoMirrored.Rounded.PlaylistAdd, "New list", onClick = actions.onNewList)
             }
         }
 

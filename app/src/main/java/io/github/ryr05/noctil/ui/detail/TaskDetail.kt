@@ -38,7 +38,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -209,7 +209,7 @@ private fun DetailContent(
         item(key = "topbar") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (hasParentInStack || parent != null) {
-                    SmallIconButton(Icons.Rounded.ArrowBack, "Back to ${parent?.title ?: "parent task"}") {
+                    SmallIconButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back to ${parent?.title ?: "parent task"}") {
                         if (hasParentInStack) actions.onBack() else parent?.let { actions.onOpenSubtask(it.id) }
                     }
                     Text(
