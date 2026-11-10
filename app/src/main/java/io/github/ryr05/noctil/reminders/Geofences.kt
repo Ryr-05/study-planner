@@ -60,12 +60,14 @@ object Geofences {
         val board = app.repository.db.board()
         val places = board.places().associateBy { it.id }
         val tasks = board.tasksWithPlaces().filter { places.containsKey(it.placeId) }
-        val signature = tasks.joinToString { t -> places[t.placeId]!!.let { "${t.id}@${it.latitude},${it.longitude},${it.radius}" } }
+        // Includes the permission state, so granting location later re-registers the fences.
+        val allowed = hasForeground(context) && hasBackground(context)
+        val signature = "$allowed;" + tasks.joinToString { t -> places[t.placeId]!!.let { "${t.id}@${it.latitude},${it.longitude},${it.radius}" } }
         if (signature == lastSignature) return
         val client = LocationServices.getGeofencingClient(context)
         runCatching { client.removeGeofences(pendingIntent(context)).await() }
         lastSignature = signature
-        if (tasks.isEmpty() || !hasForeground(context) || !hasBackground(context)) return
+        if (tasks.isEmpty() || !allowed) return
         val fences = tasks.take(95).map { t ->
             val p = places.getValue(t.placeId!!)
             Geofence.Builder()
