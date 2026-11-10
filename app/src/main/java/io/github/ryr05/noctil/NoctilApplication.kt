@@ -2,6 +2,7 @@ package io.github.ryr05.noctil
 
 import android.app.Application
 import io.github.ryr05.noctil.calendar.CalendarSync
+import io.github.ryr05.noctil.cloud.CloudSync
 import io.github.ryr05.noctil.data.Repository
 import io.github.ryr05.noctil.focus.FocusEngine
 import io.github.ryr05.noctil.data.db.NoctilDatabase
@@ -28,6 +29,7 @@ class NoctilApplication : Application() {
         scheduler = ReminderScheduler(this)
         repository = Repository(this, NoctilDatabase.build(this), scheduler)
         FocusEngine.init(this)
+        CloudSync.init(this)
 
         // Keep widgets and the lockscreen card in step with the data.
         repository.scope.launch {
@@ -36,6 +38,7 @@ class NoctilApplication : Application() {
                 Surfaces.refreshAll(this@NoctilApplication)
                 CalendarSync.sync(this@NoctilApplication)
                 HabitReminders.scheduleAll(this@NoctilApplication, it.habits)
+                CloudSync.requestSync(this@NoctilApplication)
             }
         }
         Surfaces.scheduleMidnightRefresh(this)

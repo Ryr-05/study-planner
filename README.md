@@ -54,11 +54,12 @@ priority, tag, list and repeat, and highlights them as you type.
 | Widgets | Today list (finish tasks from the home screen), month calendar, exam countdown, habits, quick add bar |
 | Lockscreen | A silent Today card on your lockscreen, with an Add task button. Turn it off in Me |
 | Shortcuts | Quick Settings tile "Add task", and long-press the app icon for Add task, Today and Focus |
-| Offline | Everything is saved on your phone. No account, no internet needed |
+| Sync | Optional Google sign-in (Me tab). Tasks, lists, habits, timetable and focus history sync across your devices |
+| Offline | Everything is saved on your phone first. No account or internet needed; changes sync when you're back online |
 
 **Adding widgets:** open **Me > Lockscreen and widgets** and tap **Add** next to any widget.
 
-Coming next: optional Google sign-in and live sync between devices. Setup steps are in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+All planned phases (1 to 5) are in. Cloud sync uses a Firebase project; how it was set up is in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 

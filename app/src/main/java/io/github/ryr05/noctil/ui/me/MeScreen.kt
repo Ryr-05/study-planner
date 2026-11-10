@@ -65,12 +65,6 @@ import io.github.ryr05.noctil.ui.theme.Palette
 
 private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releases/latest"
 
-private data class Upcoming(val icon: ImageVector, val title: String, val detail: String)
-
-private val upcoming = listOf(
-    Upcoming(Icons.Rounded.Cloud, "Sign in and live sync", "Use Noctil on more than one device"),
-)
-
 private val typingTips = listOf(
     "fri 5pm" to "Due Friday at 5:00 PM",
     "tomorrow, tmrw, tonight" to "Due dates in plain words",
@@ -114,7 +108,7 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
         ),
     ) {
         item(key = "title") { ScreenTitle(title = "Me") }
-        item(key = "profile") { ProfileCard(Modifier.padding(top = 20.dp)) }
+        item(key = "profile") { AccountCard(Modifier.padding(top = 20.dp)) }
 
         item(key = "settings-label") { SectionLabel("Settings") }
         item(key = "notifications") {
@@ -166,19 +160,6 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
         lockscreenAndWidgets(notificationsOn)
 
         backupSection(backup)
-
-        item(key = "soon-label") { SectionLabel("On the way") }
-        items(count = upcoming.size, key = { "soon-$it" }) { index ->
-            val entry = upcoming[index]
-            SettingRow(
-                icon = entry.icon,
-                title = entry.title,
-                detail = entry.detail,
-                trailing = "Soon",
-                index = index,
-                count = upcoming.size,
-            )
-        }
 
         item(key = "about-label") { SectionLabel("About") }
         item(key = "version") {
@@ -239,34 +220,6 @@ private fun openNotificationSettings(context: Context) {
         context.startActivity(intent)
     } catch (e: ActivityNotFoundException) {
         // Very old or unusual devices: nothing to open.
-    }
-}
-
-@Composable
-private fun ProfileCard(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Palette.Surface)
-            .padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(52.dp).clip(CircleShape).background(Palette.SurfaceHigh),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Person, contentDescription = null, tint = Palette.Lavender)
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Guest", style = MaterialTheme.typography.titleMedium, color = Palette.TextPrimary)
-            Text(
-                text = "Your tasks are saved on this phone and work offline. No account needed.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Palette.TextSecondary,
-            )
-        }
     }
 }
 

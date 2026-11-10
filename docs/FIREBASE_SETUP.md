@@ -1,4 +1,21 @@
-# Turning on sign-in and live sync (about 10 minutes)
+# Sign-in and live sync setup
+
+**Status: done.** Project `noctil-2333e` (Firestore in asia-southeast1, Singapore). The config is stored as the
+`GOOGLE_SERVICES_JSON` GitHub secret and written into the build by CI. The steps below are kept for reference.
+
+## Security rules in use
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+## Original steps
 
 Noctil already saves everything on your phone and can back up to a file (Me > Backup).
 **Live sync between devices** and **Google sign-in** need a free Firebase project that belongs
