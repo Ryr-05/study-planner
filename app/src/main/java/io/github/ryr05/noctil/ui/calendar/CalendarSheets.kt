@@ -399,6 +399,7 @@ fun SyncSheet(visible: Boolean, onDismiss: () -> Unit) {
         val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             permissionTick++
             CalendarPrefs.bump()
+            CalendarSync.watch(context)
         }
         val canRead = remember(permissionTick, visible) { DeviceCalendars.canRead(context) }
         val canWrite = remember(permissionTick, visible) { DeviceCalendars.canWrite(context) }

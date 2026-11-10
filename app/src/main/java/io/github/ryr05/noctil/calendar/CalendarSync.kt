@@ -75,6 +75,7 @@ object CalendarPrefs {
 object CalendarSync {
     private val mutex = Mutex()
     private var observerJob: Job? = null
+    private var watching = false
 
     suspend fun sync(context: Context) = withContext(Dispatchers.IO) {
         mutex.withLock { runCatching { syncLocked(context) } }
@@ -90,8 +91,12 @@ object CalendarSync {
         }
     }
 
-    /** Re-sync when anything changes in the phone's calendars, for example after Google syncs. */
+    /**
+     * Re-sync when anything changes in the phone's calendars, for example after Google syncs.
+     * Safe to call again (it only starts watching once), such as right after access is granted.
+     */
     fun watch(context: Context) {
+        if (watching || !DeviceCalendars.canRead(context)) return
         val app = context.applicationContext as NoctilApplication
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
@@ -104,7 +109,8 @@ object CalendarSync {
             }
         }
         runCatching {
-            context.contentResolver.registerContentObserver(CalendarContract.Events.CONTENT_URI, true, observer)
+            context.applicationContext.contentResolver.registerContentObserver(CalendarContract.Events.CONTENT_URI, true, observer)
+            watching = true
         }
     }
 
