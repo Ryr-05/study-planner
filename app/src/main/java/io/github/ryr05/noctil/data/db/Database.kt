@@ -12,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /*
@@ -58,6 +60,8 @@ data class TaskEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val deleted: Boolean = false,
+    /** How long the task blocks out on the calendar, in minutes. Null means the default (30). */
+    val durationMinutes: Int? = null,
 )
 
 @Entity(tableName = "checklist", indices = [Index("taskId")])
@@ -76,6 +80,38 @@ data class TagEntity(
     val name: String,
     val color: Int,
     val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/** A weekly class in the timetable. Entered once, shown every week on the calendar. */
+@Entity(tableName = "classes")
+data class ClassEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val room: String = "",
+    val color: Int,
+    /** Which weekdays it meets. Bit 0 is Monday, bit 6 is Sunday. */
+    val days: Int,
+    val startMinute: Int,
+    val endMinute: Int,
+    val listId: Long? = null,
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/**
+ * Links a task to the event it was copied to in the phone's calendar, with what the event looked
+ * like at the last sync. That lets sync tell which side changed. eventId is -1 when the event was
+ * deleted in the phone's calendar, so the task isn't added back.
+ */
+@Entity(tableName = "calendar_links")
+data class CalendarLinkEntity(
+    @PrimaryKey val taskId: Long,
+    val calendarId: Long,
+    val eventId: Long,
+    val title: String,
+    val start: Long,
+    val end: Long,
+    val allDay: Boolean,
+    val syncedAt: Long,
 )
 
 @Entity(tableName = "task_tags", primaryKeys = ["taskId", "tagId"], indices = [Index("tagId")])
@@ -207,12 +243,46 @@ interface TagDao {
     suspend fun unlink(taskId: Long, tagId: Long)
 }
 
+@Dao
+interface ClassDao {
+    @Query("SELECT * FROM classes ORDER BY startMinute, name")
+    fun observeAll(): Flow<List<ClassEntity>>
+
+    @Insert
+    suspend fun insert(item: ClassEntity): Long
+
+    @Update
+    suspend fun update(item: ClassEntity)
+
+    @Query("DELETE FROM classes WHERE id = :id")
+    suspend fun delete(id: Long)
+}
+
+@Dao
+interface CalendarLinkDao {
+    @Query("SELECT * FROM calendar_links")
+    suspend fun all(): List<CalendarLinkEntity>
+
+    @Query("SELECT eventId FROM calendar_links WHERE eventId > 0")
+    fun observeEventIds(): Flow<List<Long>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(link: CalendarLinkEntity)
+
+    @Query("DELETE FROM calendar_links WHERE taskId = :taskId")
+    suspend fun delete(taskId: Long)
+
+    @Query("DELETE FROM calendar_links")
+    suspend fun clear()
+}
+
 @Database(
     entities = [
         FolderEntity::class, ListEntity::class, TaskEntity::class,
         ChecklistEntity::class, TagEntity::class, TaskTagEntity::class,
+        ClassEntity::class, CalendarLinkEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -220,9 +290,35 @@ abstract class NoctilDatabase : RoomDatabase() {
     abstract fun checklist(): ChecklistDao
     abstract fun lists(): ListDao
     abstract fun tags(): TagDao
+    abstract fun classes(): ClassDao
+    abstract fun calendarLinks(): CalendarLinkDao
 
     companion object {
         fun build(context: Context): NoctilDatabase =
-            Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db").build()
+            Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
+    }
+}
+
+/**
+ * Version 1 to 2 (Phase 3): task durations, the class timetable and phone-calendar links.
+ * Existing tasks are kept. The SQL matches what Room generates for the entities above
+ * (CI prints Room's own CREATE statements so they can be compared).
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `durationMinutes` INTEGER")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `classes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, `room` TEXT NOT NULL, `color` INTEGER NOT NULL, `days` INTEGER NOT NULL, " +
+                "`startMinute` INTEGER NOT NULL, `endMinute` INTEGER NOT NULL, `listId` INTEGER, " +
+                "`updatedAt` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `calendar_links` (`taskId` INTEGER NOT NULL, `calendarId` INTEGER NOT NULL, " +
+                "`eventId` INTEGER NOT NULL, `title` TEXT NOT NULL, `start` INTEGER NOT NULL, `end` INTEGER NOT NULL, " +
+                "`allDay` INTEGER NOT NULL, `syncedAt` INTEGER NOT NULL, PRIMARY KEY(`taskId`))",
+        )
     }
 }
