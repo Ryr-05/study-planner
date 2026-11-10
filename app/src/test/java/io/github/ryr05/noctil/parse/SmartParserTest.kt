@@ -387,5 +387,13 @@ class SmartParserTest {
         assertEquals("pay fees", p("pay fees !urgent").title)
     }
 
+    @Test fun alarmWord() {
+        val r = p("wake up 6am !alarm")
+        assertEquals("wake up", r.title)
+        assertEquals(true, r.alarm)
+        assertEquals(true, p("bus with alarm 7:10").alarm)
+        assertEquals(false, p("fix alarm clock").alarm)
+    }
+
     @Test fun beforeIsDropped() = assertEquals("submit", p("submit before fri").title)
 }

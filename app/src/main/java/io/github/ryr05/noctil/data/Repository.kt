@@ -123,6 +123,7 @@ class Repository(
                         reminder = if (parsed.date != null) 0 else null,
                         durationMinutes = parsed.durationMinutes,
                         startDate = parsed.startDate?.toEpochDay(),
+                        alarm = parsed.alarm,
                         sortOrder = db.tasks().maxSortOrder() + 1,
                         createdAt = now,
                         updatedAt = now,
@@ -657,6 +658,7 @@ class Repository(
                 startDate = t.startDate?.let(LocalDate::ofEpochDay),
                 nag = t.nag,
                 placeId = t.placeId,
+                alarm = t.alarm,
             )
         }
         return Snapshot(

@@ -21,6 +21,10 @@
     <!-- Android 16: show the focus countdown as a Live Update chip. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Alarms: ring a task full screen over the lockscreen, like the Clock app. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -48,6 +52,20 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <activity
+            android:name=".reminders.AlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:turnScreenOn="true" />
+
+        <service
+            android:name=".reminders.AlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <receiver
             android:name=".reminders.ReminderReceiver"

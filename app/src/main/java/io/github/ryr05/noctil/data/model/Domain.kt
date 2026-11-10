@@ -38,6 +38,7 @@ data class TaskItem(
     val startDate: LocalDate? = null,
     val nag: Boolean = false,
     val placeId: Long? = null,
+    val alarm: Boolean = false,
 ) {
     /** Minutes the task takes up on the calendar. */
     val blockMinutes: Int get() = durationMinutes ?: DEFAULT_TASK_MINUTES

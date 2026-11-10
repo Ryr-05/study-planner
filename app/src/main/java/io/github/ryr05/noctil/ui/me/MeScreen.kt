@@ -157,6 +157,8 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
             )
         }
 
+        alarmSection()
+
         item(key = "stats-label") { SectionLabel("Progress") }
         item(key = "stats") {
             SettingRow(

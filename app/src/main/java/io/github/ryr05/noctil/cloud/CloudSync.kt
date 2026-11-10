@@ -246,7 +246,7 @@ object CloudSync {
                             "priority" to t.priority, "recurrence" to t.recurrence, "reminder" to t.reminder, "done" to t.done,
                             "completedAt" to t.completedAt, "sortOrder" to t.sortOrder, "createdAt" to t.createdAt,
                             "durationMinutes" to t.durationMinutes, "stage" to remoteOf("stages", t.stageId),
-                            "startDate" to t.startDate, "nag" to t.nag, "place" to remoteOf("places", t.placeId),
+                            "startDate" to t.startDate, "nag" to t.nag, "place" to remoteOf("places", t.placeId), "alarm" to t.alarm,
                         ),
                     )
                 }
@@ -470,7 +470,7 @@ object CloudSync {
                         recurrence = d.str("recurrence"), reminder = d.int("reminder"), done = d.bool("done"),
                         completedAt = d.long("completedAt"), sortOrder = d.long("sortOrder") ?: 0, createdAt = d.long("createdAt") ?: updated,
                         updatedAt = updated, deleted = false, durationMinutes = d.int("durationMinutes"),
-                        stageId = stage, startDate = d.long("startDate"), nag = d.bool("nag"), placeId = place,
+                        stageId = stage, startDate = d.long("startDate"), nag = d.bool("nag"), placeId = place, alarm = d.bool("alarm"),
                     )
                     return if (id != null && dao.task(id) != null) { dao.updateTask(e); key } else dao.insertTask(e.copy(id = 0)).toString()
                 }

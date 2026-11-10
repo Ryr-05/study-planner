@@ -26,6 +26,7 @@ class NoctilApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannel(this)
+        io.github.ryr05.noctil.reminders.AlarmService.createChannel(this)
         LockscreenCard.createChannel(this)
         scheduler = ReminderScheduler(this)
         repository = Repository(this, NoctilDatabase.build(this), scheduler)

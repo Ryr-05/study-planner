@@ -23,6 +23,8 @@ import io.github.ryr05.noctil.data.model.Stage
 import io.github.ryr05.noctil.data.model.Tag
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.model.TaskList
+import io.github.ryr05.noctil.reminders.AlarmScreen
+import io.github.ryr05.noctil.reminders.Ringing
 import io.github.ryr05.noctil.ui.ScreenshotChrome
 import io.github.ryr05.noctil.ui.calendar.CalMode
 import io.github.ryr05.noctil.ui.calendar.CalendarActions
@@ -113,6 +115,14 @@ class ScreenshotTest(private val fontScale: Float) {
 
     @Test fun quickAdd() = shot("11_quick_add", withChrome = false) {
         QuickAddOverlay(true, today, null, sample(), today, {}, { _, _ -> })
+    }
+
+    @Test fun alarm() = shot("12_alarm", withChrome = false) {
+        AlarmScreen(Ringing(1, "Chemistry midterm", "Due 9:00 AM  |  Chemistry"), 10, {}, {}, {}, {})
+    }
+
+    @Test fun emptyTimeline() = shot("13_timeline_empty") {
+        TasksScreen(TaskView.All, Snapshot.Empty.copy(loaded = true), today, noTask, {}, {}, layout = TaskLayout.Timeline)
     }
 
     private fun calendarActions() = CalendarActions({}, {}, { _, _ -> }, { _, _, _ -> }, {}, {}, {})

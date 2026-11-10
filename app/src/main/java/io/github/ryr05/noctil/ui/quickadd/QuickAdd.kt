@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
@@ -258,6 +259,7 @@ private fun chipsFor(p: ParsedInput, today: LocalDate): List<Chip> = buildList {
     if (lengthTyped) p.durationMinutes?.let { add(Chip(TokenKind.Duration, Icons.Rounded.Timelapse, lengthLabel(it), Palette.Lavender)) }
     p.recurrence?.let { add(Chip(TokenKind.Repeat, Icons.Rounded.EventRepeat, it.label(), Palette.Lavender)) }
     if (p.priority != Priority.None) add(Chip(TokenKind.Priority, Icons.Rounded.Flag, p.priority.label, p.priority.color()))
+    if (p.alarm) add(Chip(TokenKind.Alarm, Icons.Rounded.Alarm, "Rings as alarm", Palette.Lavender))
     p.listName?.let { add(Chip(TokenKind.List, Icons.Rounded.FolderOpen, it, Palette.Lavender)) }
     if (p.tags.isNotEmpty()) add(Chip(TokenKind.Tag, Icons.Rounded.Sell, p.tags.joinToString(" ") { "#$it" }, Palette.Lavender))
 }

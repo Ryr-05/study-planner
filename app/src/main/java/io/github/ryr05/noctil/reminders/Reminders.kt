@@ -45,16 +45,28 @@ class ReminderScheduler(private val context: Context) {
         val at = Reminders.triggerAt(task.localDate(), task.localTime(), task.reminder) ?: return
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         if (millis <= System.currentTimeMillis()) return
-        scheduleAt(task.id, millis)
+        scheduleAt(task.id, millis, alarmClock = task.alarm || AlarmPrefs.allReminders(context))
     }
 
-    fun scheduleAt(taskId: Long, millis: Long) {
+    /**
+     * [alarmClock] uses Android's alarm-clock timing: exact even in battery saver, and it shows
+     * the alarm icon in the status bar, like the phone's own Clock app.
+     */
+    fun scheduleAt(taskId: Long, millis: Long, alarmClock: Boolean = false) {
         val pending = pendingIntent(taskId, create = true) ?: return
         val exact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarms.canScheduleExactAlarms() else true
-        if (exact) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
-        } else {
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        when {
+            exact && alarmClock -> {
+                val show = PendingIntent.getActivity(
+                    context,
+                    taskId.toInt(),
+                    Intent(context, MainActivity::class.java).putExtra(EXTRA_OPEN_TASK, taskId),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+                alarms.setAlarmClock(AlarmManager.AlarmClockInfo(millis, show), pending)
+            }
+            exact -> alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+            else -> alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
         }
     }
 
@@ -155,9 +167,13 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 val task = app.repository.task(id)
                 if (task != null && !task.done && !task.deleted) {
-                    Notifications.showReminder(context, task, app.repository.listName(task.listId))
-                    // "Keep reminding me": come back in a few minutes until Done or Snooze is tapped.
-                    if (task.nag) app.scheduler.scheduleAt(id, System.currentTimeMillis() + NAG_MINUTES * 60_000)
+                    val ring = (task.alarm || AlarmPrefs.allReminders(context)) && Notifications.canNotify(context)
+                    // Ring like an alarm clock; if Android refuses, fall back to a normal reminder.
+                    if (!ring || !AlarmService.start(context, id)) {
+                        Notifications.showReminder(context, task, app.repository.listName(task.listId))
+                        // "Keep reminding me": come back in a few minutes until Done or Snooze is tapped.
+                        if (task.nag) app.scheduler.scheduleAt(id, System.currentTimeMillis() + NAG_MINUTES * 60_000)
+                    }
                 }
             } finally {
                 pending.finish()

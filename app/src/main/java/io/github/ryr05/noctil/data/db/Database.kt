@@ -71,6 +71,8 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "0") val nag: Boolean = false,
     /** Remind when arriving at this saved place. */
     val placeId: Long? = null,
+    /** Ring like an alarm clock (full screen, sound until dismissed) instead of a quiet notification. */
+    @ColumnInfo(defaultValue = "0") val alarm: Boolean = false,
 )
 
 /** A custom board column, like "Doing" or "Review". */
@@ -541,7 +543,7 @@ interface BoardDao {
         FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
         SyncMapEntity::class, StageEntity::class, PlaceEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -560,7 +562,7 @@ abstract class NoctilDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }
@@ -616,6 +618,13 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
                 "`remoteId` TEXT NOT NULL, `hash` INTEGER NOT NULL, PRIMARY KEY(`tableName`, `localKey`))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_map_tableName_remoteId` ON `sync_map` (`tableName`, `remoteId`)")
+    }
+}
+
+/** Version 5 to 6: a task can ring like an alarm. Existing data is kept. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `alarm` INTEGER NOT NULL DEFAULT 0")
     }
 }
 

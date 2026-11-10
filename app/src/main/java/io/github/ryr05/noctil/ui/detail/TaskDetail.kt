@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
@@ -545,7 +546,9 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
             icon = Icons.Rounded.Notifications,
             label = "Remind",
             value = if (task.date == null) "Add a date first"
-            else Reminders.label(task.reminder, hasTime) + if (task.nag && task.reminder != null) ", repeats" else "",
+            else Reminders.label(task.reminder, hasTime) +
+                (if (task.alarm && task.reminder != null) ", rings as alarm" else "") +
+                (if (task.nag && task.reminder != null) ", repeats" else ""),
             active = task.date != null && task.reminder != null,
             onClick = { if (task.date != null) open = true },
         )
@@ -574,6 +577,26 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
                 onClick = {
                     open = false
                     repo.update(task.id) { it.copy(nag = !task.nag, reminder = it.reminder ?: 0) }
+                    onReminderSet()
+                },
+            )
+            DropdownMenuItem(
+                leadingIcon = {
+                    Icon(
+                        if (task.alarm) Icons.Rounded.Check else Icons.Rounded.Alarm,
+                        contentDescription = null,
+                        tint = if (task.alarm) Palette.Lavender else Palette.TextSecondary,
+                    )
+                },
+                text = {
+                    Column {
+                        Text("Ring like an alarm", color = Palette.TextPrimary)
+                        Text("Full screen, with sound until you stop it", style = MaterialTheme.typography.labelSmall, color = Palette.TextSecondary)
+                    }
+                },
+                onClick = {
+                    open = false
+                    repo.update(task.id) { it.copy(alarm = !task.alarm, reminder = it.reminder ?: 0) }
                     onReminderSet()
                 },
             )

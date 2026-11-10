@@ -12,7 +12,7 @@ import java.time.Month
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-enum class TokenKind { Date, Time, Priority, Tag, List, Repeat, Duration }
+enum class TokenKind { Date, Time, Priority, Tag, List, Repeat, Duration, Alarm }
 
 /** A piece of the typed text that was understood. [start] inclusive, [end] exclusive. */
 data class Token(val kind: TokenKind, val start: Int, val end: Int)
@@ -32,6 +32,8 @@ data class ParsedInput(
     val durationMinutes: Int? = null,
     /** From a day range like "mon to fri" (the timeline shows a bar). */
     val startDate: LocalDate? = null,
+    /** "!alarm" or "with alarm": ring like an alarm clock. */
+    val alarm: Boolean = false,
 )
 
 /**
@@ -48,7 +50,7 @@ data class ParsedInput(
  * Length: for 2 hours, for 45 min. Priority: !1 !2 !3, p1 p2 p3, !high !med !low, !urgent, !!! !!.
  * Repeat: daily, weekly, biweekly, monthly, yearly, every day/weekday/weekend/other week,
  * every 3 days, every monday, every mon and wed, mondays, each friday, every month on the 15th,
- * every morning. Tags: #exam. List: ~Chemistry.
+ * every morning. Tags: #exam. List: ~Chemistry. Alarm: !alarm or "with alarm".
  */
 object SmartParser {
     private const val WD =
@@ -129,6 +131,8 @@ object SmartParser {
     private val rBangs = rx("(?<![\\p{L}\\p{N}_!])(!!!|!!)(?![\\p{L}\\p{N}_!])")
     private val rTag = Regex("(?<![\\p{L}\\p{N}_#])#([\\p{L}\\p{N}_-]{1,32})")
     private val rList = Regex("(?<![\\p{L}\\p{N}_~])~([\\p{L}\\p{N}_-]{1,32})")
+
+    private val rAlarm = rx("(?:(?<![\\p{L}\\p{N}_!])!alarm|${B}with\\s+(?:an\\s+)?alarm)$E")
 
     private val rDanglingEnd = rx("\\s+(?:on|at|by|due|until|till|from|before)$")
     private val rDanglingStart = rx("^(?:on|at|by|from)\\s+")
@@ -431,6 +435,14 @@ object SmartParser {
             }
         }
 
+        var alarm = false
+        if (TokenKind.Alarm !in disabled) {
+            firstFree(rAlarm)?.let { m ->
+                alarm = true
+                claim(TokenKind.Alarm, m.range)
+            }
+        }
+
         // ---------- Fill in a date when the text implies one ----------
         var dateIsDefault = false
         val rec = recurrence
@@ -454,6 +466,7 @@ object SmartParser {
             dateIsDefault = dateIsDefault,
             durationMinutes = duration,
             startDate = startDate,
+            alarm = alarm,
         )
     }
 
