@@ -6,6 +6,11 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.room.withTransaction
 import io.github.ryr05.noctil.data.db.ChecklistEntity
 import io.github.ryr05.noctil.data.db.ClassEntity
+import io.github.ryr05.noctil.data.db.FocusSessionEntity
+import io.github.ryr05.noctil.data.db.HabitCheckEntity
+import io.github.ryr05.noctil.data.db.HabitEntity
+import io.github.ryr05.noctil.data.model.FocusSession
+import io.github.ryr05.noctil.data.model.Habit
 import io.github.ryr05.noctil.data.db.FolderEntity
 import io.github.ryr05.noctil.data.db.ListEntity
 import io.github.ryr05.noctil.data.db.NoctilDatabase
@@ -68,7 +73,15 @@ class Repository(
         combine(
             db.lists().observeLists(), db.lists().observeFolders(), db.tags().observeTags(), db.classes().observeAll(),
         ) { l, f, g, c -> Quad(l, f, g, c) },
-    ) { a, b -> buildSnapshot(a.first, a.second, a.third, b.a, b.b, b.c, b.d) }
+        combine(db.habits().observeHabits(), db.habits().observeChecks(), db.focus().observeAll()) { h, k, f ->
+            Triple(h, k, f)
+        },
+    ) { a, b, c ->
+        buildSnapshot(a.first, a.second, a.third, b.a, b.b, b.c, b.d).copy(
+            habits = buildHabits(c.first, c.second),
+            focus = c.third.map { FocusSession(it.startedAt, it.minutes, it.taskId, it.kind) },
+        )
+    }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, Snapshot.Empty)
 
@@ -246,6 +259,54 @@ class Repository(
         scope.launch { db.classes().delete(id) }
     }
 
+    // ---------- Habits ----------
+
+    fun saveHabit(
+        id: Long?, name: String, color: Color, days: Set<java.time.DayOfWeek>, goal: Int, reminder: LocalTime?,
+    ) {
+        if (name.isBlank() || days.isEmpty()) return
+        scope.launch {
+            val existing = id?.let { db.habits().get(it) }
+            val entity = (existing ?: HabitEntity(name = name, color = color.toArgb(), sortOrder = db.habits().count())).copy(
+                name = name.trim(), color = color.toArgb(), days = days.toMask(), goal = goal.coerceIn(1, 50),
+                reminderMinute = reminder?.toMinutes(), updatedAt = System.currentTimeMillis(),
+            )
+            if (existing == null) db.habits().insert(entity) else db.habits().update(entity)
+        }
+    }
+
+    fun deleteHabit(id: Long) {
+        scope.launch {
+            db.withTransaction {
+                db.habits().deleteChecks(id)
+                db.habits().delete(id)
+            }
+        }
+    }
+
+    /**
+     * Tapping a habit adds one check-in for the day. Once the goal is reached the next tap
+     * clears the day, so a one-a-day habit simply toggles.
+     */
+    fun tapHabit(habitId: Long, date: LocalDate) {
+        scope.launch { tapHabitNow(habitId, date) }
+    }
+
+    suspend fun tapHabitNow(habitId: Long, date: LocalDate) {
+        val habit = db.habits().get(habitId) ?: return
+        val day = date.toEpochDay()
+        val current = db.habits().check(habitId, day)?.count ?: 0
+        if (current >= habit.goal) db.habits().deleteCheck(habitId, day)
+        else db.habits().upsertCheck(HabitCheckEntity(habitId, day, current + 1))
+    }
+
+    // ---------- Focus ----------
+
+    suspend fun recordFocus(startedAt: Long, minutes: Int, taskId: Long?, kind: String) {
+        if (minutes <= 0) return
+        db.focus().insert(FocusSessionEntity(startedAt = startedAt, minutes = minutes, taskId = taskId, kind = kind))
+    }
+
     // ---------- Checklist ----------
 
     fun addChecklistItem(taskId: Long, text: String) {
@@ -410,6 +471,23 @@ class Repository(
             }
         }
         prefs.edit().putBoolean("seeded_v1", true).apply()
+    }
+
+    private fun buildHabits(habits: List<HabitEntity>, checks: List<HabitCheckEntity>): List<Habit> {
+        val byHabit = checks.groupBy { it.habitId }
+        val zone = java.time.ZoneId.systemDefault()
+        return habits.map { h ->
+            Habit(
+                id = h.id,
+                name = h.name,
+                color = Color(h.color),
+                days = daysFromMask(h.days),
+                goal = h.goal,
+                reminder = h.reminderMinute?.let { LocalTime.of(it / 60, it % 60) },
+                createdOn = java.time.Instant.ofEpochMilli(h.createdAt).atZone(zone).toLocalDate(),
+                checks = byHabit[h.id].orEmpty().associate { it.day to it.count },
+            )
+        }
     }
 
     private fun buildSnapshot(

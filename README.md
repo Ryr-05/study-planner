@@ -47,15 +47,18 @@ priority, tag, list and repeat, and highlights them as you type.
 | Time blocking | Tap an empty time to plan a task there. Long-press a task and drag it to a new time or day |
 | Timetable | Enter each class once (days, time, room, color) and it shows every week |
 | Phone calendars | See your Google, Samsung or Outlook events. Optionally copy dated tasks into one of them, two-way |
-| Focus | Pomodoro timer (25 / 5 / 15 minutes) |
-| Widgets | Today list (finish tasks from the home screen), month calendar, exam countdown, quick add bar |
+| Focus | Pomodoro and stopwatch, linked to a task. Countdown on the lockscreen (and a Live Update chip on Android 16). Soft rain, white or brown noise |
+| Habits | Daily or chosen days, goals like 8 glasses of water, streaks, 20-week heatmap, reminders, home screen widget |
+| Statistics | Tasks finished, focus time and habit consistency by week, month or year |
+| Backup | Back up to a file (save it to Google Drive), restore it, or export tasks as CSV. Android's automatic backup is on too |
+| Widgets | Today list (finish tasks from the home screen), month calendar, exam countdown, habits, quick add bar |
 | Lockscreen | A silent Today card on your lockscreen, with an Add task button. Turn it off in Me |
 | Shortcuts | Quick Settings tile "Add task", and long-press the app icon for Add task, Today and Focus |
 | Offline | Everything is saved on your phone. No account, no internet needed |
 
 **Adding widgets:** open **Me > Lockscreen and widgets** and tap **Add** next to any widget.
 
-Coming next: the focus timer upgrade (lockscreen countdown, white noise), habits and statistics.
+Coming next: optional Google sign-in and live sync between devices. Setup steps are in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 

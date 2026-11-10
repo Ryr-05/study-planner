@@ -68,10 +68,7 @@ private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releas
 private data class Upcoming(val icon: ImageVector, val title: String, val detail: String)
 
 private val upcoming = listOf(
-    Upcoming(Icons.Rounded.LocalFireDepartment, "Habits", "Streaks and a yearly heatmap"),
-    Upcoming(Icons.Rounded.BarChart, "Statistics", "Tasks done and hours focused"),
-    Upcoming(Icons.Rounded.CalendarMonth, "Calendar sync", "Two-way with Google and Samsung calendars"),
-    Upcoming(Icons.Rounded.Cloud, "Backup and sync", "Optional sign-in, works offline too"),
+    Upcoming(Icons.Rounded.Cloud, "Sign in and live sync", "Use Noctil on more than one device"),
 )
 
 private val typingTips = listOf(
@@ -87,7 +84,8 @@ private val typingTips = listOf(
 )
 
 @Composable
-fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Unit) {
+fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Unit, onOpenStats: () -> Unit) {
+    val backup = rememberBackupController()
     val context = LocalContext.current
     val version = remember(context) { appVersion(context) }
     var showTips by remember { mutableStateOf(false) }
@@ -152,7 +150,22 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
             )
         }
 
+        item(key = "stats-label") { SectionLabel("Progress") }
+        item(key = "stats") {
+            SettingRow(
+                icon = Icons.Rounded.BarChart,
+                title = "Statistics",
+                detail = "Tasks finished, focus time and habit consistency",
+                trailing = null,
+                index = 0,
+                count = 1,
+                onClick = onOpenStats,
+            )
+        }
+
         lockscreenAndWidgets(notificationsOn)
+
+        backupSection(backup)
 
         item(key = "soon-label") { SectionLabel("On the way") }
         items(count = upcoming.size, key = { "soon-$it" }) { index ->
@@ -183,6 +196,8 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
             )
         }
     }
+
+    backup.dialogs()
 
     if (showTips) {
         AlertDialog(

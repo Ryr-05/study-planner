@@ -13,7 +13,9 @@ object Launch {
     const val ACTION_OPEN_TASK = "io.github.ryr05.noctil.action.OPEN_TASK"
     const val ACTION_OPEN_DATE = "io.github.ryr05.noctil.action.OPEN_DATE"
     const val ACTION_TODAY = "io.github.ryr05.noctil.action.TODAY"
+    const val ACTION_HABITS = "io.github.ryr05.noctil.action.HABITS"
     const val EXTRA_OPEN_DATE = "io.github.ryr05.noctil.OPEN_DATE"
+    const val EXTRA_START_FOCUS = "io.github.ryr05.noctil.START_FOCUS"
 
     private fun base(context: Context, action: String) =
         Intent(context, MainActivity::class.java)
@@ -23,6 +25,11 @@ object Launch {
     fun quickAdd(context: Context): Intent = base(context, ACTION_QUICK_ADD)
 
     fun today(context: Context): Intent = base(context, ACTION_TODAY)
+
+    fun habits(context: Context): Intent = base(context, ACTION_HABITS)
+
+    fun focus(context: Context, startNext: Boolean = false): Intent =
+        base(context, ACTION_FOCUS).putExtra(EXTRA_START_FOCUS, startNext)
 
     fun openTask(context: Context, id: Long): Intent = base(context, ACTION_OPEN_TASK).putExtra(EXTRA_OPEN_TASK, id)
 

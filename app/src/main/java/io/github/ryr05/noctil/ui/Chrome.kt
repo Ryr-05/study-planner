@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Timer
@@ -56,6 +57,7 @@ import io.github.ryr05.noctil.ui.theme.rememberReduceMotion
 enum class Tab(val label: String, val icon: ImageVector) {
     Tasks("Tasks", Icons.Rounded.TaskAlt),
     Calendar("Calendar", Icons.Rounded.CalendarMonth),
+    Habits("Habits", Icons.Rounded.LocalFireDepartment),
     Focus("Focus", Icons.Rounded.Timer),
     Me("Me", Icons.Rounded.Person),
 }

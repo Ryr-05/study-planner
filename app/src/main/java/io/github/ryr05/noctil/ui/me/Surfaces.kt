@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.TaskAlt
@@ -56,6 +57,7 @@ import io.github.ryr05.noctil.ui.components.groupShape
 import io.github.ryr05.noctil.ui.theme.Palette
 import io.github.ryr05.noctil.widget.CalendarWidgetReceiver
 import io.github.ryr05.noctil.widget.ExamWidgetReceiver
+import io.github.ryr05.noctil.widget.HabitWidgetReceiver
 import io.github.ryr05.noctil.widget.QuickAddWidgetReceiver
 import io.github.ryr05.noctil.widget.TodayWidgetReceiver
 
@@ -65,6 +67,7 @@ private val widgetOptions = listOf(
     WidgetOption(Icons.Rounded.TaskAlt, "Today list", "Finish tasks right from your home screen", TodayWidgetReceiver::class.java),
     WidgetOption(Icons.Rounded.CalendarMonth, "Month calendar", "Dots on days with tasks", CalendarWidgetReceiver::class.java),
     WidgetOption(Icons.Rounded.School, "Exam countdown", "Days until your next #exam", ExamWidgetReceiver::class.java),
+    WidgetOption(Icons.Rounded.LocalFireDepartment, "Habits", "Check in on today's habits", HabitWidgetReceiver::class.java),
     WidgetOption(Icons.Rounded.Add, "Quick add bar", "One tap to type a new task", QuickAddWidgetReceiver::class.java),
 )
 

@@ -68,6 +68,8 @@ data class Snapshot(
     val checklist: Map<Long, List<ChecklistItem>>,
     val loaded: Boolean,
     val classes: List<SchoolClass> = emptyList(),
+    val habits: List<Habit> = emptyList(),
+    val focus: List<FocusSession> = emptyList(),
 ) {
     val byId: Map<Long, TaskItem> by lazy { tasks.associateBy { it.id } }
     val childrenOf: Map<Long, List<TaskItem>> by lazy {

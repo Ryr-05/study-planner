@@ -46,6 +46,14 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.data.model.Folder
+import io.github.ryr05.noctil.data.model.Habit
+import io.github.ryr05.noctil.data.model.ItemColors
+import io.github.ryr05.noctil.ui.habits.HabitActions
+import io.github.ryr05.noctil.ui.habits.HabitDetailSheet
+import io.github.ryr05.noctil.ui.habits.HabitEditorDialog
+import io.github.ryr05.noctil.ui.habits.HabitsScreen
+import io.github.ryr05.noctil.ui.stats.StatsSheet
+import io.github.ryr05.noctil.focus.FocusEngine
 import io.github.ryr05.noctil.data.model.SchoolClass
 import io.github.ryr05.noctil.data.toMinutes
 import io.github.ryr05.noctil.parse.SmartParser
@@ -91,12 +99,15 @@ sealed interface LaunchRequest {
     data class OpenDate(val date: LocalDate) : LaunchRequest
     data object QuickAdd : LaunchRequest
     data object Today : LaunchRequest
-    data object Focus : LaunchRequest
+    data object Habits : LaunchRequest
+    data class Focus(val startNext: Boolean = false) : LaunchRequest
 }
 
 private data class UndoMessage(val id: Long, val text: String, val undo: () -> Unit)
 
 private data class ClassEdit(val cls: SchoolClass?)
+
+private data class HabitEdit(val habit: Habit?)
 
 private sealed interface Editor {
     data object NewList : Editor
@@ -132,6 +143,9 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var timetableOpen by rememberSaveable { mutableStateOf(false) }
     var syncOpen by rememberSaveable { mutableStateOf(false) }
     var classEditing by remember { mutableStateOf<ClassEdit?>(null) }
+    var habitOpenId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var habitEditing by remember { mutableStateOf<HabitEdit?>(null) }
+    var statsOpen by rememberSaveable { mutableStateOf(false) }
     var undo by remember { mutableStateOf<UndoMessage?>(null) }
     val hazeState = rememberHazeState()
 
@@ -190,9 +204,14 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 tab = Tab.Tasks
                 viewKey = TaskView.Today.key
             }
-            LaunchRequest.Focus -> {
+            LaunchRequest.Habits -> {
+                detailStack = emptyList()
+                tab = Tab.Habits
+            }
+            is LaunchRequest.Focus -> {
                 detailStack = emptyList()
                 tab = Tab.Focus
+                if (request.startNext) FocusEngine.start(context)
             }
         }
         onLaunchHandled()
@@ -234,6 +253,8 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             detailStack.isNotEmpty() -> detailStack = detailStack.dropLast(1)
             quickAddOpen -> quickAddOpen = false
             slot != null -> slot = null
+            habitOpenId != null -> habitOpenId = null
+            statsOpen -> statsOpen = false
             timetableOpen -> timetableOpen = false
             syncOpen -> syncOpen = false
             searchOpen -> searchOpen = false
@@ -283,10 +304,23 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                                 onOpenSync = { syncOpen = true },
                             ),
                         )
-                        Tab.Focus -> FocusScreen()
+                        Tab.Habits -> HabitsScreen(
+                            snapshot = snapshot,
+                            today = today,
+                            actions = HabitActions(
+                                onTap = { habit, day -> repo.tapHabit(habit.id, day) },
+                                onOpen = { habitOpenId = it.id },
+                                onNew = { habitEditing = HabitEdit(null) },
+                                onQuickAdd = { name, goal ->
+                                    repo.saveHabit(null, name, ItemColors[(snapshot.habits.size + 2) % ItemColors.size], java.time.DayOfWeek.entries.toSet(), goal, null)
+                                },
+                            ),
+                        )
+                        Tab.Focus -> FocusScreen(snapshot, today)
                         Tab.Me -> MeScreen(
                             askedForNotificationsBefore = repo.askedForNotifications,
                             onAskNotifications = { askForNotificationsOnce() },
+                            onOpenStats = { statsOpen = true },
                         )
                     }
                 }
@@ -308,7 +342,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                     },
                     modifier = Modifier.weight(1f),
                 )
-                AddButton(onClick = { quickAddOpen = true })
+                AddButton(onClick = { if (tab == Tab.Habits) habitEditing = HabitEdit(null) else quickAddOpen = true })
             }
 
             UndoBar(
@@ -375,6 +409,16 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
 
             SyncSheet(visible = syncOpen, onDismiss = { syncOpen = false })
 
+            HabitDetailSheet(
+                habit = habitOpenId?.let { id -> snapshot.habits.firstOrNull { it.id == id } },
+                today = today,
+                onDismiss = { habitOpenId = null },
+                onEdit = { habitEditing = HabitEdit(it) },
+                onTap = { habit, day -> repo.tapHabit(habit.id, day) },
+            )
+
+            StatsSheet(visible = statsOpen, snapshot = snapshot, today = today, onDismiss = { statsOpen = false })
+
             val quickAddDefaultDate = when {
                 tab == Tab.Calendar -> calendarDay
                 tab != Tab.Tasks -> today
@@ -391,7 +435,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 onDismiss = { quickAddOpen = false },
                 onSubmit = { parsed, listId ->
                     quickAddOpen = false
-                    if (tab == Tab.Focus || tab == Tab.Me) tab = Tab.Tasks
+                    if (tab == Tab.Focus || tab == Tab.Me || tab == Tab.Habits) tab = Tab.Tasks
                     repo.addTask(parsed, listId) { id ->
                         showUndo("Added \"${parsed.title}\"") { repo.delete(id) }
                     }
@@ -420,6 +464,19 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 ),
             )
         }
+    }
+
+    habitEditing?.let { edit ->
+        HabitEditorDialog(
+            initial = edit.habit,
+            onDismiss = { habitEditing = null },
+            onSave = { name, color, days, goal, reminder ->
+                habitEditing = null
+                repo.saveHabit(edit.habit?.id, name, color, days, goal, reminder)
+                if (reminder != null) askForNotificationsOnce()
+            },
+            onDelete = edit.habit?.let { h -> { habitEditing = null; habitOpenId = null; repo.deleteHabit(h.id) } },
+        )
     }
 
     classEditing?.let { edit ->

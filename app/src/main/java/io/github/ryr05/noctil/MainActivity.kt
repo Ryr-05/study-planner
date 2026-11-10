@@ -46,8 +46,9 @@ class MainActivity : ComponentActivity() {
         request.value = when {
             taskId > 0 -> LaunchRequest.OpenTask(taskId)
             intent.action == Launch.ACTION_QUICK_ADD -> LaunchRequest.QuickAdd
-            intent.action == Launch.ACTION_FOCUS -> LaunchRequest.Focus
+            intent.action == Launch.ACTION_FOCUS -> LaunchRequest.Focus(intent.getBooleanExtra(Launch.EXTRA_START_FOCUS, false))
             intent.action == Launch.ACTION_TODAY -> LaunchRequest.Today
+            intent.action == Launch.ACTION_HABITS -> LaunchRequest.Habits
             intent.action == Launch.ACTION_OPEN_DATE && intent.hasExtra(Launch.EXTRA_OPEN_DATE) ->
                 LaunchRequest.OpenDate(LocalDate.ofEpochDay(intent.getLongExtra(Launch.EXTRA_OPEN_DATE, 0L)))
             else -> request.value

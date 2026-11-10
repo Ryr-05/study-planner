@@ -24,6 +24,7 @@ object Surfaces {
         runCatching { TodayWidget().updateAll(context) }
         runCatching { CalendarWidget().updateAll(context) }
         runCatching { ExamWidget().updateAll(context) }
+        runCatching { HabitWidget().updateAll(context) }
         LockscreenCard.update(context, app.repository.snapshot.value)
     }
 

@@ -404,3 +404,86 @@ private fun QuickAddContent() {
         Text("Add a task", style = style(15.sp, W.text, FontWeight.Medium), modifier = GlanceModifier.defaultWeight())
     }
 }
+
+// ---------------- Habits ----------------
+
+class HabitWidget : GlanceAppWidget() {
+    override val sizeMode: SizeMode = SizeMode.Exact
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val initial = loadedSnapshot(context)
+        provideContent {
+            val snap = liveSnapshot(LocalContext.current, initial)
+            HabitContent(snap, LocalDate.now())
+        }
+    }
+}
+
+class HabitWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = HabitWidget()
+}
+
+val HabitIdKey = ActionParameters.Key<Long>("habit_id")
+
+/** Tapping a habit's circle in the widget checks it in for today. */
+class CheckHabitAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val id = parameters[HabitIdKey] ?: return
+        val app = context.applicationContext as NoctilApplication
+        app.repository.tapHabitNow(id, LocalDate.now())
+        HabitWidget().updateAll(context)
+    }
+}
+
+@Composable
+private fun HabitContent(snap: Snapshot, today: LocalDate) {
+    val context = LocalContext.current
+    val habits = snap.habits.filter { it.isDue(today) }
+    val done = habits.count { it.isDone(today) }
+    Panel {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity(Launch.habits(context))),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Habits", style = style(18.sp, weight = FontWeight.Bold), modifier = GlanceModifier.defaultWeight())
+            Text(if (habits.isEmpty()) "" else "$done of ${habits.size}", style = style(12.sp, W.secondary))
+        }
+        Spacer(GlanceModifier.height(8.dp))
+        if (habits.isEmpty()) {
+            Box(modifier = GlanceModifier.fillMaxSize().clickable(actionStartActivity(Launch.habits(context))), contentAlignment = Alignment.Center) {
+                Text(if (snap.habits.isEmpty()) "Tap to add a habit" else "Nothing due today", style = style(13.sp, W.secondary))
+            }
+        } else {
+            LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+                items(habits, itemId = { it.id }) { habit ->
+                    val isDone = habit.isDone(today)
+                    Row(modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = GlanceModifier
+                                .size(36.dp)
+                                .clickable(actionRunCallback<CheckHabitAction>(actionParametersOf(HabitIdKey to habit.id))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(
+                                provider = ImageProvider(if (isDone) R.drawable.widget_today_cell else R.drawable.widget_ring),
+                                contentDescription = if (isDone) "${habit.name} done" else "Check in ${habit.name}",
+                                colorFilter = ColorFilter.tint(ColorProvider(habit.color)),
+                                modifier = GlanceModifier.size(20.dp),
+                            )
+                        }
+                        Spacer(GlanceModifier.width(6.dp))
+                        Column(modifier = GlanceModifier.defaultWeight()) {
+                            Text(habit.name, style = style(14.sp, if (isDone) W.secondary else W.text), maxLines = 1)
+                            val streak = habit.currentStreak(today)
+                            val meta = listOfNotNull(
+                                if (habit.goal > 1) "${habit.count(today)} of ${habit.goal}" else null,
+                                if (streak > 0) "$streak day streak" else null,
+                            ).joinToString(", ")
+                            if (meta.isNotEmpty()) Text(meta, style = style(11.sp, W.secondary), maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

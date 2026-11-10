@@ -6,6 +6,7 @@
     <string name="widget_calendar_desc">This month, with dots on days that have tasks.</string>
     <string name="widget_exam_desc">Countdown to your next exam.</string>
     <string name="widget_quickadd_desc">Add a task in one tap.</string>
+    <string name="widget_habits_desc">Today\'s habits. Tap a circle to check in.</string>
 
     <string name="tile_add_task">Add task</string>
 
