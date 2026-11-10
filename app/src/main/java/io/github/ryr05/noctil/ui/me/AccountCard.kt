@@ -17,8 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.Login
-import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.Login
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Icon
@@ -90,7 +90,7 @@ fun AccountCard(modifier: Modifier = Modifier) {
         if (status.available) {
             Spacer(Modifier.height(14.dp))
             if (user == null) {
-                Pill(if (busy) "Opening Google..." else "Sign in with Google", selected = true, leading = Icons.Rounded.Login) {
+                Pill(if (busy) "Opening Google..." else "Sign in with Google", selected = true, leading = Icons.AutoMirrored.Rounded.Login) {
                     if (busy) return@Pill
                     busy = true
                     scope.launch {
@@ -130,7 +130,7 @@ fun AccountCard(modifier: Modifier = Modifier) {
                     Pill("Sync now", selected = false, leading = Icons.Rounded.Sync) {
                         scope.launch { CloudSync.syncNow(context) }
                     }
-                    Pill("Sign out", selected = false, leading = Icons.Rounded.Logout) { confirmSignOut = true }
+                    Pill("Sign out", selected = false, leading = Icons.AutoMirrored.Rounded.Logout) { confirmSignOut = true }
                 }
             }
         }
