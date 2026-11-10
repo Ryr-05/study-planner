@@ -59,6 +59,8 @@ data class TaskActions(
     val onToggle: (TaskItem) -> Unit,
     val onOpen: (TaskItem) -> Unit,
     val onMoveToTomorrow: (TaskItem) -> Unit,
+    /** Long-press or tap while picking: adds or removes a task from the selection. */
+    val onSelect: ((TaskItem) -> Unit)? = null,
 )
 
 @Composable
@@ -69,10 +71,38 @@ fun TasksScreen(
     actions: TaskActions,
     onOpenLists: () -> Unit,
     onOpenSearch: () -> Unit,
+    layout: TaskLayout = TaskLayout.List,
+    onLayout: (TaskLayout) -> Unit = {},
+    selection: Set<Long>? = null,
+    boardActions: BoardActions? = null,
 ) {
     val sections = sectionsFor(view, snapshot, today)
     var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
     val showList = view !is TaskView.OfList
+
+    if (layout != TaskLayout.List) {
+        Column(Modifier.fillMaxSize().padding(top = topContentPadding())) {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                Header(view, snapshot, today, onOpenLists, onOpenSearch)
+                LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp, bottom = 12.dp))
+            }
+            val tasks = tasksInView(view, snapshot, today)
+            when (layout) {
+                TaskLayout.Board -> BoardView(
+                    tasks = tasks,
+                    stages = snapshot.stages,
+                    today = today,
+                    taskActions = actions,
+                    actions = boardActions ?: BoardActions({ _, _, _ -> }, {}, {}, {}),
+                    bottomPadding = bottomContentPadding(),
+                )
+                TaskLayout.Matrix -> MatrixView(tasks, today, actions, bottomContentPadding())
+                TaskLayout.Timeline -> TimelineView(tasks, today, actions, bottomContentPadding())
+                TaskLayout.List -> Unit
+            }
+        }
+        return
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -86,7 +116,10 @@ fun TasksScreen(
         item(key = "header") {
             Header(view, snapshot, today, onOpenLists, onOpenSearch)
         }
-        if (view == TaskView.Today) {
+        item(key = "layouts") {
+            LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp))
+        }
+        if (view == TaskView.Today && selection == null) {
             nextExam(snapshot, today)?.let { exam ->
                 item(key = "exam") {
                     ExamCard(exam, today, Modifier.padding(top = 20.dp)) { actions.onOpen(exam) }
@@ -105,11 +138,32 @@ fun TasksScreen(
                 today = today,
                 showList = showList,
                 actions = actions,
+                selection = selection,
             )
         }
 
         if (snapshot.loaded && sections.none { !it.collapsible }) {
             item(key = "empty") { EmptyState(view) }
+        }
+    }
+}
+
+@Composable
+private fun LayoutSwitch(layout: TaskLayout, onLayout: (TaskLayout) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Palette.Surface).padding(4.dp)) {
+        TaskLayout.entries.forEach { l ->
+            val selected = l == layout
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (selected) Palette.SurfaceHigh else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable(onClickLabel = "Show as ${l.label}", role = Role.Tab) { onLayout(l) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(l.label, style = MaterialTheme.typography.labelLarge, color = if (selected) Palette.TextPrimary else Palette.TextSecondary)
+            }
         }
     }
 }
@@ -189,6 +243,7 @@ private fun LazyListScope.renderSection(
     today: LocalDate,
     showList: Boolean,
     actions: TaskActions,
+    selection: Set<Long>?,
 ) {
     item(key = "header-${section.key}") {
         val color = if (section.tone == SectionTone.Danger) Palette.PriorityHigh else Palette.TextSecondary
@@ -228,6 +283,8 @@ private fun LazyListScope.renderSection(
                 onOpen = actions.onOpen,
                 onMoveToTomorrow = actions.onMoveToTomorrow,
                 modifier = Modifier.animateItem(),
+                selection = selection,
+                onSelect = actions.onSelect,
             )
         }
     }

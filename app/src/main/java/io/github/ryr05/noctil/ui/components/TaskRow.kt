@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,10 +100,13 @@ fun TaskRow(
     modifier: Modifier = Modifier,
     showList: Boolean = true,
     onMoveToTomorrow: ((TaskItem) -> Unit)? = null,
+    /** Non-null while picking several tasks. Tap toggles; long-press starts picking. */
+    selection: Set<Long>? = null,
+    onSelect: ((TaskItem) -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val shape = groupShape(index, count)
-    val swipeEnabled = !task.done && onMoveToTomorrow != null
+    val swipeEnabled = !task.done && onMoveToTomorrow != null && selection == null
 
     val state = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
@@ -149,13 +154,13 @@ fun TaskRow(
             }
         },
     ) {
-        RowContent(task, index, today, showDate, showList, onToggle, onOpen, onMoveToTomorrow)
+        RowContent(task, index, today, showDate, showList, onToggle, onOpen, onMoveToTomorrow, selection, onSelect)
     }
 }
 
 private data class SwipeLook(val color: Color, val icon: ImageVector, val label: String, val alignEnd: Boolean)
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RowContent(
     task: TaskItem,
@@ -166,13 +171,17 @@ private fun RowContent(
     onToggle: (TaskItem) -> Unit,
     onOpen: (TaskItem) -> Unit,
     onMoveToTomorrow: ((TaskItem) -> Unit)?,
+    selection: Set<Long>?,
+    onSelect: ((TaskItem) -> Unit)?,
 ) {
+    val selecting = selection != null
+    val selected = selection?.contains(task.id) == true
     val haptics = LocalHapticFeedback.current
     val overdue = !task.done && task.date != null && task.date.isBefore(today)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Palette.Surface)
+            .background(if (selected) Palette.Lavender.copy(alpha = 0.16f) else Palette.Surface)
             .drawBehind {
                 if (index > 0) {
                     drawLine(
@@ -183,7 +192,12 @@ private fun RowContent(
                     )
                 }
             }
-            .clickable(onClickLabel = "Open task") { onOpen(task) }
+            .combinedClickable(
+                onClickLabel = if (selecting) "Select" else "Open task",
+                onLongClickLabel = "Select several",
+                onLongClick = onSelect?.let { pick -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); pick(task) } },
+                onClick = { if (selecting) onSelect?.invoke(task) else onOpen(task) },
+            )
             .semantics {
                 if (onMoveToTomorrow != null && !task.done) {
                     customActions = listOf(
@@ -194,15 +208,30 @@ private fun RowContent(
             .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CheckCircle(
-            checked = task.done,
-            ringColor = task.priority.color(),
-            label = task.title,
-            onToggle = {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onToggle(task)
-            },
-        )
+        if (selecting) {
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(22.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(7.dp))
+                        .background(if (selected) Palette.Lavender else Color.Transparent)
+                        .border(2.dp, if (selected) Palette.Lavender else Palette.TextTertiary, androidx.compose.foundation.shape.RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Palette.OnLavender, modifier = Modifier.size(15.dp))
+                }
+            }
+        } else {
+            CheckCircle(
+                checked = task.done,
+                ringColor = task.priority.color(),
+                label = task.title,
+                onToggle = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onToggle(task)
+                },
+            )
+        }
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
             Text(

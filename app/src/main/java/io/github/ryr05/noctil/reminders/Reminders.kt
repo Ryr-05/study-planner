@@ -33,6 +33,7 @@ private const val ACTION_REMIND = "io.github.ryr05.noctil.REMIND"
 private const val ACTION_DONE = "io.github.ryr05.noctil.DONE"
 private const val ACTION_SNOOZE = "io.github.ryr05.noctil.SNOOZE"
 private const val SNOOZE_MINUTES = 10L
+private const val NAG_MINUTES = 5L
 
 /** Schedules one alarm per task at its reminder time. */
 class ReminderScheduler(private val context: Context) {
@@ -95,7 +96,7 @@ object Notifications {
         }
 
     @SuppressLint("MissingPermission")
-    fun showReminder(context: Context, task: TaskEntity, listName: String?) {
+    fun showReminder(context: Context, task: TaskEntity, listName: String?, placeName: String? = null) {
         if (!canNotify(context)) return
         val id = task.id
         val open = PendingIntent.getActivity(
@@ -107,8 +108,9 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val detail = listOfNotNull(
-            task.localTime()?.let { "Due ${it.format(timeFormat)}" } ?: "Due today",
+            placeName?.let { "You're at $it" } ?: task.localTime()?.let { "Due ${it.format(timeFormat)}" } ?: "Due today",
             listName,
+            if (task.nag) "Reminding every 5 minutes" else null,
         ).joinToString("  |  ")
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
@@ -117,7 +119,8 @@ object Notifications {
             .setContentText(detail)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setAutoCancel(true)
+            .setAutoCancel(!task.nag)
+            .setOngoing(task.nag)
             .setContentIntent(open)
             .addAction(0, "Done", actionIntent(context, ACTION_DONE, id))
             .addAction(0, "Snooze 10 min", actionIntent(context, ACTION_SNOOZE, id))
@@ -153,6 +156,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 val task = app.repository.task(id)
                 if (task != null && !task.done && !task.deleted) {
                     Notifications.showReminder(context, task, app.repository.listName(task.listId))
+                    // "Keep reminding me": come back in a few minutes until Done or Snooze is tapped.
+                    if (task.nag) app.scheduler.scheduleAt(id, System.currentTimeMillis() + NAG_MINUTES * 60_000)
                 }
             } finally {
                 pending.finish()

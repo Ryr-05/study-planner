@@ -34,12 +34,22 @@ data class TaskItem(
     val checklistTotal: Int,
     val checklistDone: Int,
     val durationMinutes: Int? = null,
+    val stageId: Long? = null,
+    val startDate: LocalDate? = null,
+    val nag: Boolean = false,
+    val placeId: Long? = null,
 ) {
     /** Minutes the task takes up on the calendar. */
     val blockMinutes: Int get() = durationMinutes ?: DEFAULT_TASK_MINUTES
 }
 
 const val DEFAULT_TASK_MINUTES = 30
+
+/** A custom board column. "To Do" and "Done" are built in. */
+data class Stage(val id: Long, val name: String, val sortOrder: Int)
+
+/** A saved place for location reminders. */
+data class Place(val id: Long, val name: String, val latitude: Double, val longitude: Double, val radius: Int)
 
 /** A weekly class from the timetable. */
 data class SchoolClass(
@@ -70,7 +80,10 @@ data class Snapshot(
     val classes: List<SchoolClass> = emptyList(),
     val habits: List<Habit> = emptyList(),
     val focus: List<FocusSession> = emptyList(),
+    val stages: List<Stage> = emptyList(),
+    val places: List<Place> = emptyList(),
 ) {
+    val placesById: Map<Long, Place> by lazy { places.associateBy { it.id } }
     val byId: Map<Long, TaskItem> by lazy { tasks.associateBy { it.id } }
     val childrenOf: Map<Long, List<TaskItem>> by lazy {
         tasks.filter { it.parentId != null }.groupBy { it.parentId!! }

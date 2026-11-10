@@ -46,6 +46,11 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.data.model.Folder
+import io.github.ryr05.noctil.data.model.Stage
+import io.github.ryr05.noctil.ui.tasks.BoardActions
+import io.github.ryr05.noctil.ui.tasks.ConfirmDialog
+import io.github.ryr05.noctil.ui.tasks.TaskLayout
+import io.github.ryr05.noctil.ui.tasks.sectionsFor
 import io.github.ryr05.noctil.data.model.Habit
 import io.github.ryr05.noctil.data.model.ItemColors
 import io.github.ryr05.noctil.ui.habits.HabitActions
@@ -109,6 +114,27 @@ private data class ClassEdit(val cls: SchoolClass?)
 
 private data class HabitEdit(val habit: Habit?)
 
+private data class StageEdit(val stage: Stage?, val deleting: Boolean = false)
+
+@Composable
+private fun NameDialog(title: String, initial: String, placeholder: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.SurfaceHigh,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        title = { Text(title, color = Palette.TextPrimary) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text, onValueChange = { text = it }, singleLine = true,
+                placeholder = { Text(placeholder) }, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            )
+        },
+        confirmButton = { androidx.compose.material3.TextButton(enabled = text.isNotBlank(), onClick = { onSave(text) }) { Text("Save") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = Palette.TextPrimary) } },
+    )
+}
+
 private sealed interface Editor {
     data object NewList : Editor
     data class EditList(val list: TaskList) : Editor
@@ -146,6 +172,9 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var habitOpenId by rememberSaveable { mutableStateOf<Long?>(null) }
     var habitEditing by remember { mutableStateOf<HabitEdit?>(null) }
     var statsOpen by rememberSaveable { mutableStateOf(false) }
+    var layout by rememberSaveable { mutableStateOf(TaskLayout.List) }
+    var selection by remember { mutableStateOf<Set<Long>?>(null) }
+    var stageEditing by remember { mutableStateOf<StageEdit?>(null) }
     var undo by remember { mutableStateOf<UndoMessage?>(null) }
     val hazeState = rememberHazeState()
 
@@ -243,14 +272,77 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 repo.update(task.id) { it.copy(dueDate = previousDate?.toEpochDay(), reminder = previousReminder) }
             }
         },
+        onSelect = { task ->
+            val current = selection ?: emptySet()
+            val next = if (task.id in current) current - task.id else current + task.id
+            selection = if (next.isEmpty() && selection != null) null else next
+        },
+    )
+
+    // Stop picking when leaving the list.
+    LaunchedEffect(tab, viewKey, layout) { selection = null }
+
+    fun countText(n: Int) = if (n == 1) "1 task" else "$n tasks"
+    val selectionActions = SelectionActions(
+        onDone = {
+            val ids = selection.orEmpty()
+            selection = null
+            repo.completeMany(ids) { done -> showUndo("Finished ${countText(done.size)}") { repo.undoCompletions(done) } }
+        },
+        onDate = { date ->
+            val ids = selection.orEmpty()
+            selection = null
+            repo.updateMany(ids, { t ->
+                t.copy(
+                    dueDate = date?.toEpochDay(),
+                    dueTime = if (date == null) null else t.dueTime,
+                    reminder = if (date == null) null else t.reminder ?: 0,
+                )
+            }) { before -> showUndo("Rescheduled ${countText(before.size)}") { repo.restoreVersions(before) } }
+        },
+        onMove = { listId ->
+            val ids = selection.orEmpty()
+            selection = null
+            repo.updateMany(ids, { it.copy(listId = listId) }) { before -> showUndo("Moved ${countText(before.size)}") { repo.restoreVersions(before) } }
+        },
+        onPriority = { p ->
+            val ids = selection.orEmpty()
+            selection = null
+            repo.updateMany(ids, { it.copy(priority = p.value) }) { before -> showUndo("Updated ${countText(before.size)}") { repo.restoreVersions(before) } }
+        },
+        onTag = { name ->
+            val ids = selection.orEmpty()
+            selection = null
+            repo.addTagMany(ids, name)
+        },
+        onDelete = {
+            val ids = selection.orEmpty()
+            selection = null
+            repo.deleteMany(ids) { gone -> showUndo("Deleted ${countText(ids.size)}") { repo.restore(gone) } }
+        },
+        onSelectAll = { selection = sectionsFor(view, snapshot, today).flatMap { it.tasks }.map { it.id }.toSet() },
+        onClose = { selection = null },
+    )
+
+    val boardActions = BoardActions(
+        onMove = { task, stageId, done ->
+            repo.moveToStage(task.id, stageId, done) { completion ->
+                if (completion != null) showUndo("Finished \"${task.title}\"") { repo.undoCompletion(completion) }
+            }
+        },
+        onNewStage = { stageEditing = StageEdit(null) },
+        onRenameStage = { stageEditing = StageEdit(it) },
+        onDeleteStage = { stageEditing = StageEdit(it, deleting = true) },
     )
 
     BackHandler(
         enabled = detailStack.isNotEmpty() || quickAddOpen || searchOpen || drawerOpen || slot != null ||
-            timetableOpen || syncOpen || tab != Tab.Tasks || view != TaskView.Today,
+            timetableOpen || syncOpen || habitOpenId != null || statsOpen || selection != null ||
+            tab != Tab.Tasks || view != TaskView.Today,
     ) {
         when {
             detailStack.isNotEmpty() -> detailStack = detailStack.dropLast(1)
+            selection != null -> selection = null
             quickAddOpen -> quickAddOpen = false
             slot != null -> slot = null
             habitOpenId != null -> habitOpenId = null
@@ -278,6 +370,10 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                             actions = taskActions,
                             onOpenLists = { drawerOpen = true },
                             onOpenSearch = { searchOpen = true },
+                            layout = layout,
+                            onLayout = { layout = it },
+                            selection = selection,
+                            boardActions = boardActions,
                         )
                         Tab.Calendar -> CalendarScreen(
                             snapshot = snapshot,
@@ -326,6 +422,16 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 }
             }
 
+            val picked = selection
+            if (picked != null) {
+                SelectionBar(
+                    count = picked.size,
+                    lists = snapshot.lists,
+                    today = today,
+                    actions = selectionActions,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            } else {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -343,6 +449,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 AddButton(onClick = { if (tab == Tab.Habits) habitEditing = HabitEdit(null) else quickAddOpen = true })
+            }
             }
 
             UndoBar(
@@ -462,6 +569,29 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                     },
                     onReminderSet = { askForNotificationsOnce() },
                 ),
+            )
+        }
+    }
+
+    stageEditing?.let { edit ->
+        if (edit.deleting && edit.stage != null) {
+            ConfirmDialog(
+                title = "Delete column \"${edit.stage.name}\"?",
+                body = "Its tasks move back to To Do. Nothing is deleted.",
+                confirm = "Delete column",
+                onConfirm = { stageEditing = null; repo.deleteStage(edit.stage.id) },
+                onDismiss = { stageEditing = null },
+            )
+        } else {
+            NameDialog(
+                title = if (edit.stage == null) "New column" else "Rename column",
+                initial = edit.stage?.name.orEmpty(),
+                placeholder = "Review",
+                onDismiss = { stageEditing = null },
+                onSave = { name ->
+                    stageEditing = null
+                    if (edit.stage == null) repo.createStage(name) else repo.renameStage(edit.stage.id, name)
+                },
             )
         }
     }

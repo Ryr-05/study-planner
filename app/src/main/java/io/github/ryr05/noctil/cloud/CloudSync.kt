@@ -22,6 +22,8 @@ import io.github.ryr05.noctil.data.db.FolderEntity
 import io.github.ryr05.noctil.data.db.HabitCheckEntity
 import io.github.ryr05.noctil.data.db.HabitEntity
 import io.github.ryr05.noctil.data.db.ListEntity
+import io.github.ryr05.noctil.data.db.PlaceEntity
+import io.github.ryr05.noctil.data.db.StageEntity
 import io.github.ryr05.noctil.data.db.SyncMapEntity
 import io.github.ryr05.noctil.data.db.TagEntity
 import io.github.ryr05.noctil.data.db.TaskEntity
@@ -157,7 +159,7 @@ object CloudSync {
 
     /** Cloud collections, in the order that keeps references valid (parents before children). */
     internal val TABLES = listOf(
-        "folders", "lists", "tags", "tasks", "checklist", "taskTags", "classes", "habits", "habitChecks", "focus",
+        "folders", "lists", "tags", "stages", "places", "tasks", "checklist", "taskTags", "classes", "habits", "habitChecks", "focus",
     )
 
     /**
@@ -227,6 +229,10 @@ object CloudSync {
                 Row(it.id.toString(), it.updatedAt, mapOf("name" to it.name, "color" to it.color, "folder" to remoteOf("folders", it.folderId), "sortOrder" to it.sortOrder))
             }
             "tags" -> db.backup().tags().map { Row(it.id.toString(), it.updatedAt, mapOf("name" to it.name, "color" to it.color)) }
+            "stages" -> db.board().stages().map { Row(it.id.toString(), it.updatedAt, mapOf("name" to it.name, "sortOrder" to it.sortOrder)) }
+            "places" -> db.board().places().map {
+                Row(it.id.toString(), it.updatedAt, mapOf("name" to it.name, "latitude" to it.latitude.toString(), "longitude" to it.longitude.toString(), "radius" to it.radius))
+            }
             "tasks" -> {
                 val tasks = dao.liveTasks()
                 // Parents first, so a subtask can point at its parent's cloud id.
@@ -239,7 +245,8 @@ object CloudSync {
                             "parent" to remoteOf("tasks", t.parentId), "dueDate" to t.dueDate, "dueTime" to t.dueTime,
                             "priority" to t.priority, "recurrence" to t.recurrence, "reminder" to t.reminder, "done" to t.done,
                             "completedAt" to t.completedAt, "sortOrder" to t.sortOrder, "createdAt" to t.createdAt,
-                            "durationMinutes" to t.durationMinutes,
+                            "durationMinutes" to t.durationMinutes, "stage" to remoteOf("stages", t.stageId),
+                            "startDate" to t.startDate, "nag" to t.nag, "place" to remoteOf("places", t.placeId),
                         ),
                     )
                 }
@@ -364,6 +371,8 @@ object CloudSync {
                 "folders" -> dao.folder(id)?.updatedAt
                 "lists" -> dao.list(id)?.updatedAt
                 "tags" -> dao.tag(id)?.updatedAt
+                "stages" -> db.board().stage(id)?.updatedAt
+                "places" -> db.board().place(id)?.updatedAt
                 "tasks" -> dao.task(id)?.updatedAt
                 "checklist" -> dao.checklistItem(id)?.updatedAt
                 "classes" -> dao.schoolClass(id)?.updatedAt
@@ -379,6 +388,14 @@ object CloudSync {
                 "folders" -> dao.deleteFolder(id)
                 "lists" -> dao.deleteList(id)
                 "tags" -> dao.deleteTag(id)
+                "stages" -> {
+                    db.board().clearStage(id, System.currentTimeMillis())
+                    db.board().deleteStage(id)
+                }
+                "places" -> {
+                    db.board().clearPlace(id, System.currentTimeMillis())
+                    db.board().deletePlace(id)
+                }
                 "tasks" -> {
                     dao.softDeleteTask(id)
                     app.scheduler.cancel(id)
@@ -426,17 +443,34 @@ object CloudSync {
                     val inserted = dao.insertTag(e.copy(id = 0))
                     return (if (inserted > 0) inserted else dao.tagByName(name)?.id)?.toString()
                 }
+                "stages" -> {
+                    val e = StageEntity(id ?: 0, d.str("name") ?: "Column", d.int("sortOrder") ?: 0, updated)
+                    val b = db.board()
+                    return if (id != null && b.stage(id) != null) { b.updateStage(e); key } else b.insertStage(e.copy(id = 0)).toString()
+                }
+                "places" -> {
+                    val lat = d.str("latitude")?.toDoubleOrNull() ?: return key
+                    val lng = d.str("longitude")?.toDoubleOrNull() ?: return key
+                    val e = PlaceEntity(id ?: 0, d.str("name") ?: "Place", lat, lng, d.int("radius") ?: 150, updated)
+                    val b = db.board()
+                    return if (id != null && b.place(id) != null) { b.updatePlace(e); key } else b.insertPlace(e.copy(id = 0)).toString()
+                }
                 "tasks" -> {
                     var list: Long? = null
                     var parent: Long? = null
+                    var stage: Long? = null
+                    var place: Long? = null
                     if (!ref("lists", d["list"], force) { list = it }) return null
                     if (!ref("tasks", d["parent"], force) { parent = it }) return null
+                    if (!ref("stages", d["stage"], force) { stage = it }) return null
+                    if (!ref("places", d["place"], force) { place = it }) return null
                     val e = TaskEntity(
                         id = id ?: 0, title = d.str("title") ?: "", notes = d.str("notes") ?: "", listId = list, parentId = parent,
                         dueDate = d.long("dueDate"), dueTime = d.int("dueTime"), priority = d.int("priority") ?: 0,
                         recurrence = d.str("recurrence"), reminder = d.int("reminder"), done = d.bool("done"),
                         completedAt = d.long("completedAt"), sortOrder = d.long("sortOrder") ?: 0, createdAt = d.long("createdAt") ?: updated,
                         updatedAt = updated, deleted = false, durationMinutes = d.int("durationMinutes"),
+                        stageId = stage, startDate = d.long("startDate"), nag = d.bool("nag"), placeId = place,
                     )
                     return if (id != null && dao.task(id) != null) { dao.updateTask(e); key } else dao.insertTask(e.copy(id = 0)).toString()
                 }

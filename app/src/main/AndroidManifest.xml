@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Location reminders ("when I get to campus"). Asked only when you save a place. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
     <!-- Focus timer: keeps the countdown and focus sounds going with the screen off. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -119,6 +124,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Focus timer countdown shown on the lockscreen while the person studies" />
         </service>
+
+        <receiver
+            android:name=".reminders.GeofenceReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".reminders.HabitReminderReceiver"

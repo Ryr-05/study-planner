@@ -39,8 +39,10 @@ priority, tag, list and repeat, and highlights them as you type.
 | Tasks | Notes, due date and time, priority, colored tags, subtasks (nested), checklists |
 | Lists | Lists for each class, folders to group them, plus Today, Next 7 days, High priority, All, Completed and Inbox |
 | Repeat | Daily, weekdays, weekly on chosen days, every few days, monthly, yearly |
-| Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Survives restarts |
-| Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change |
+| Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Optional "keep reminding until done". Survives restarts |
+| Places | Save a spot like your campus, then get reminded when you arrive. No map account needed |
+| Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change. Long-press to select many and finish, reschedule, move, tag or delete them together |
+| Views | List, Board (To Do, Doing, your own columns, Done; drag cards between them), Eisenhower Matrix, and Timeline (bars from start to due date) |
 | Search | Titles, notes, checklist items, tags and list names |
 | Exams | Tag a task `#exam` (or name it "midterm", "quiz"...) to get a countdown on Today |
 | Calendar | Day, week, month and year views. Classes, phone events and tasks together |
@@ -59,7 +61,7 @@ priority, tag, list and repeat, and highlights them as you type.
 
 **Adding widgets:** open **Me > Lockscreen and widgets** and tap **Add** next to any widget.
 
-All planned phases (1 to 5) are in. Cloud sync uses a Firebase project; how it was set up is in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
+Phases 1 to 6 are in. Next up: shared lists for group projects, then voice and AI. Cloud sync uses a Firebase project; how it was set up is in [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 

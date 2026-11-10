@@ -6,6 +6,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.room.withTransaction
 import io.github.ryr05.noctil.data.db.ChecklistEntity
 import io.github.ryr05.noctil.data.db.ClassEntity
+import io.github.ryr05.noctil.data.db.PlaceEntity
+import io.github.ryr05.noctil.data.db.StageEntity
+import io.github.ryr05.noctil.data.model.Place
+import io.github.ryr05.noctil.data.model.Stage
 import io.github.ryr05.noctil.data.db.FocusSessionEntity
 import io.github.ryr05.noctil.data.db.HabitCheckEntity
 import io.github.ryr05.noctil.data.db.HabitEntity
@@ -76,10 +80,13 @@ class Repository(
         combine(db.habits().observeHabits(), db.habits().observeChecks(), db.focus().observeAll()) { h, k, f ->
             Triple(h, k, f)
         },
-    ) { a, b, c ->
+        combine(db.board().observeStages(), db.board().observePlaces()) { st, pl -> st to pl },
+    ) { a, b, c, d ->
         buildSnapshot(a.first, a.second, a.third, b.a, b.b, b.c, b.d).copy(
             habits = buildHabits(c.first, c.second),
             focus = c.third.map { FocusSession(it.startedAt, it.minutes, it.taskId, it.kind) },
+            stages = d.first.map { Stage(it.id, it.name, it.sortOrder) },
+            places = d.second.map { Place(it.id, it.name, it.latitude, it.longitude, it.radius) },
         )
     }
         .flowOn(Dispatchers.Default)
@@ -238,6 +245,114 @@ class Repository(
     }
 
     fun setDuration(id: Long, minutes: Int?) = update(id) { it.copy(durationMinutes = minutes) }
+
+    // ---------- Board ----------
+
+    /** Moves a task to a board column. Done finishes it; any other column reopens it if needed. */
+    fun moveToStage(id: Long, stageId: Long?, done: Boolean, onResult: (Completion?) -> Unit = {}) {
+        scope.launch {
+            if (done) {
+                onResult(setDoneNow(id, true))
+            } else {
+                setDoneNow(id, false)
+                updateNow(id) { it.copy(stageId = stageId) }
+                onResult(null)
+            }
+        }
+    }
+
+    fun createStage(name: String) {
+        if (name.isBlank()) return
+        scope.launch { db.board().insertStage(StageEntity(name = name.trim(), sortOrder = db.board().stageCount())) }
+    }
+
+    fun renameStage(id: Long, name: String) {
+        if (name.isBlank()) return
+        scope.launch {
+            val s = db.board().stage(id) ?: return@launch
+            db.board().updateStage(s.copy(name = name.trim(), updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    /** Deletes a column. Its tasks move back to To Do. */
+    fun deleteStage(id: Long) {
+        scope.launch {
+            db.withTransaction {
+                db.board().clearStage(id, System.currentTimeMillis())
+                db.board().deleteStage(id)
+            }
+        }
+    }
+
+    // ---------- Places ----------
+
+    fun savePlace(name: String, latitude: Double, longitude: Double, radius: Int = 150, onSaved: (Long) -> Unit = {}) {
+        if (name.isBlank()) return
+        scope.launch {
+            onSaved(db.board().insertPlace(PlaceEntity(name = name.trim(), latitude = latitude, longitude = longitude, radius = radius)))
+        }
+    }
+
+    fun deletePlace(id: Long) {
+        scope.launch {
+            db.withTransaction {
+                db.board().clearPlace(id, System.currentTimeMillis())
+                db.board().deletePlace(id)
+            }
+        }
+    }
+
+    // ---------- Many at once ----------
+
+    fun completeMany(ids: Collection<Long>, onResult: (List<Completion>) -> Unit = {}) {
+        scope.launch { onResult(ids.mapNotNull { setDoneNow(it, true) }) }
+    }
+
+    fun undoCompletions(list: List<Completion>) = list.forEach(::undoCompletion)
+
+    fun deleteMany(ids: Collection<Long>, onResult: (List<Long>) -> Unit = {}) {
+        scope.launch {
+            val all = mutableListOf<Long>()
+            val queue = ArrayDeque(ids.toList())
+            while (queue.isNotEmpty()) {
+                val next = queue.removeFirst()
+                if (next in all) continue
+                all += next
+                queue.addAll(db.tasks().childIds(next))
+            }
+            db.tasks().setDeleted(all, true, System.currentTimeMillis())
+            all.forEach {
+                scheduler.cancel(it)
+                Notifications.cancel(context, it)
+            }
+            onResult(all)
+        }
+    }
+
+    /** Applies the same change to many tasks, and hands back their previous versions for Undo. */
+    fun updateMany(ids: Collection<Long>, transform: (TaskEntity) -> TaskEntity, onResult: (List<TaskEntity>) -> Unit = {}) {
+        scope.launch {
+            val before = ids.mapNotNull { db.tasks().get(it) }
+            before.forEach { t -> updateNow(t.id, transform) }
+            onResult(before)
+        }
+    }
+
+    /** Puts tasks back exactly as they were (used by Undo after a batch change). */
+    fun restoreVersions(versions: List<TaskEntity>) {
+        scope.launch {
+            versions.forEach { old ->
+                db.tasks().update(old.copy(updatedAt = System.currentTimeMillis()))
+                scheduler.schedule(old)
+            }
+        }
+    }
+
+    fun addTagMany(ids: Collection<Long>, name: String) {
+        val clean = name.trim().removePrefix("#").trim()
+        if (clean.isEmpty()) return
+        scope.launch { ids.forEach { linkTagByName(it, clean) } }
+    }
 
     // ---------- Timetable ----------
 
@@ -454,6 +569,10 @@ class Repository(
     }
 
     private suspend fun seedIfNeeded() {
+        if (!prefs.getBoolean("seeded_stages", false)) {
+            if (db.board().stageCount() == 0) db.board().insertStage(StageEntity(name = "Doing", sortOrder = 0))
+            prefs.edit().putBoolean("seeded_stages", true).apply()
+        }
         if (prefs.getBoolean("seeded_v1", false)) return
         if (db.lists().listCount() == 0) {
             val today = LocalDate.now().toEpochDay()
@@ -532,6 +651,10 @@ class Repository(
                 checklistTotal = items.size,
                 checklistDone = items.count { it.done },
                 durationMinutes = t.durationMinutes,
+                stageId = t.stageId,
+                startDate = t.startDate?.let(LocalDate::ofEpochDay),
+                nag = t.nag,
+                placeId = t.placeId,
             )
         }
         return Snapshot(

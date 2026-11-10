@@ -12,6 +12,8 @@ import io.github.ryr05.noctil.data.db.FolderEntity
 import io.github.ryr05.noctil.data.db.HabitCheckEntity
 import io.github.ryr05.noctil.data.db.HabitEntity
 import io.github.ryr05.noctil.data.db.ListEntity
+import io.github.ryr05.noctil.data.db.PlaceEntity
+import io.github.ryr05.noctil.data.db.StageEntity
 import io.github.ryr05.noctil.data.db.TagEntity
 import io.github.ryr05.noctil.data.db.TaskEntity
 import io.github.ryr05.noctil.data.db.TaskTagEntity
@@ -31,7 +33,9 @@ object Backup {
 
     suspend fun export(context: Context, uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
-            val b = (context.applicationContext as NoctilApplication).repository.db.backup()
+            val db0 = (context.applicationContext as NoctilApplication).repository.db
+            val b = db0.backup()
+            val board = db0.board()
             val root = JSONObject()
                 .put("app", "Noctil")
                 .put("format", FORMAT)
@@ -43,6 +47,7 @@ object Backup {
                         .putOpt("dueDate", t.dueDate).putOpt("dueTime", t.dueTime).put("priority", t.priority).putOpt("recurrence", t.recurrence)
                         .putOpt("reminder", t.reminder).put("done", t.done).putOpt("completedAt", t.completedAt).put("sortOrder", t.sortOrder)
                         .put("createdAt", t.createdAt).put("updatedAt", t.updatedAt).putOpt("durationMinutes", t.durationMinutes)
+                        .putOpt("stageId", t.stageId).putOpt("startDate", t.startDate).put("nag", t.nag).putOpt("placeId", t.placeId)
                 }))
                 .put("checklist", JSONArray(b.checklist().map { JSONObject().put("id", it.id).put("taskId", it.taskId).put("text", it.text).put("done", it.done).put("sortOrder", it.sortOrder) }))
                 .put("tags", JSONArray(b.tags().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }))
@@ -51,6 +56,8 @@ object Backup {
                 .put("habits", JSONArray(b.habits().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color).put("days", it.days).put("goal", it.goal).putOpt("reminderMinute", it.reminderMinute).put("sortOrder", it.sortOrder).put("createdAt", it.createdAt).put("archived", it.archived) }))
                 .put("habitChecks", JSONArray(b.habitChecks().map { JSONObject().put("habitId", it.habitId).put("day", it.day).put("count", it.count) }))
                 .put("focusSessions", JSONArray(b.focusSessions().map { JSONObject().put("id", it.id).put("startedAt", it.startedAt).put("minutes", it.minutes).putOpt("taskId", it.taskId).put("kind", it.kind) }))
+                .put("stages", JSONArray(board.stages().map { JSONObject().put("id", it.id).put("name", it.name).put("sortOrder", it.sortOrder) }))
+                .put("places", JSONArray(board.places().map { JSONObject().put("id", it.id).put("name", it.name).put("latitude", it.latitude).put("longitude", it.longitude).put("radius", it.radius) }))
             context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(root.toString().toByteArray()) }
                 ?: error("Couldn't open the file")
             root.getJSONArray("tasks").length()
@@ -78,6 +85,9 @@ object Backup {
             db.withTransaction {
                 b.clearTaskTags(); b.clearChecklist(); b.clearTasks(); b.clearTags(); b.clearLists(); b.clearFolders()
                 b.clearClasses(); b.clearHabitChecks(); b.clearHabits(); b.clearFocusSessions(); b.clearCalendarLinks()
+                db.board().clearStages(); db.board().clearPlaces(); db.sync().clearMaps()
+                db.board().insertStages(arr("stages").objects().map { StageEntity(it.getLong("id"), it.getString("name"), it.optInt("sortOrder")) })
+                db.board().insertPlaces(arr("places").objects().map { PlaceEntity(it.getLong("id"), it.getString("name"), it.getDouble("latitude"), it.getDouble("longitude"), it.optInt("radius", 150)) })
                 b.insertFolders(arr("folders").objects().map { FolderEntity(it.getLong("id"), it.getString("name"), it.optInt("sortOrder"), it.optLong("updatedAt")) })
                 b.insertLists(arr("lists").objects().map { ListEntity(it.getLong("id"), it.getString("name"), it.getInt("color"), it.longOrNull("folderId"), it.optInt("sortOrder"), it.optLong("updatedAt")) })
                 b.insertTasks(arr("tasks").objects().map {
@@ -88,6 +98,8 @@ object Backup {
                         reminder = it.intOrNull("reminder"), done = it.optBoolean("done"), completedAt = it.longOrNull("completedAt"),
                         sortOrder = it.optLong("sortOrder"), createdAt = it.optLong("createdAt"), updatedAt = System.currentTimeMillis(),
                         durationMinutes = it.intOrNull("durationMinutes"),
+                        stageId = it.longOrNull("stageId"), startDate = it.longOrNull("startDate"),
+                        nag = it.optBoolean("nag"), placeId = it.longOrNull("placeId"),
                     )
                 })
                 b.insertChecklist(arr("checklist").objects().map { ChecklistEntity(it.getLong("id"), it.getLong("taskId"), it.getString("text"), it.optBoolean("done"), it.optLong("sortOrder")) })

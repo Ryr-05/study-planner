@@ -6,6 +6,7 @@ import io.github.ryr05.noctil.cloud.CloudSync
 import io.github.ryr05.noctil.data.Repository
 import io.github.ryr05.noctil.focus.FocusEngine
 import io.github.ryr05.noctil.data.db.NoctilDatabase
+import io.github.ryr05.noctil.reminders.Geofences
 import io.github.ryr05.noctil.reminders.HabitReminders
 import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
@@ -39,6 +40,7 @@ class NoctilApplication : Application() {
                 CalendarSync.sync(this@NoctilApplication)
                 HabitReminders.scheduleAll(this@NoctilApplication, it.habits)
                 CloudSync.requestSync(this@NoctilApplication)
+                Geofences.refresh(this@NoctilApplication)
             }
         }
         Surfaces.scheduleMidnightRefresh(this)

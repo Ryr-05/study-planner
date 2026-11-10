@@ -43,6 +43,9 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.Flag
@@ -196,6 +199,8 @@ private fun DetailContent(
 ) {
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
+    var showStart by remember { mutableStateOf(false) }
+    var showPlace by remember { mutableStateOf(false) }
     val parent = task.parentId?.let { snapshot.byId[it] }
 
     LazyColumn(
@@ -272,6 +277,22 @@ private fun DetailContent(
                 if (task.time != null) DurationRow(task, repo)
                 RepeatRow(task, repo, today)
                 ReminderRow(task, repo, actions.onReminderSet)
+                PropertyRow(
+                    icon = Icons.Rounded.DateRange,
+                    label = "Starts",
+                    value = task.startDate?.let { relativeDay(it, today) } ?: "No start date",
+                    active = task.startDate != null,
+                    onClick = { showStart = true },
+                    onClear = if (task.startDate != null) ({ repo.update(task.id) { it.copy(startDate = null) } }) else null,
+                )
+                PropertyRow(
+                    icon = Icons.Rounded.Place,
+                    label = "Place",
+                    value = task.placeId?.let { snapshot.placesById[it]?.name }?.let { "When I get to $it" } ?: "No place",
+                    active = task.placeId != null,
+                    onClick = { showPlace = true },
+                    onClear = if (task.placeId != null) ({ repo.update(task.id) { it.copy(placeId = null) } }) else null,
+                )
                 ListRow(task, snapshot, repo)
             }
         }
@@ -350,6 +371,32 @@ private fun DetailContent(
                 repo.setDate(task.id, date)
                 actions.onReminderSet()
             },
+        )
+    }
+    if (showStart) {
+        DateDialog(
+            initial = task.startDate ?: task.date ?: today,
+            onDismiss = { showStart = false },
+            onPick = { date ->
+                showStart = false
+                repo.update(task.id) { t ->
+                    // A start after the due date would make no sense; move the due date along.
+                    val due = t.dueDate?.takeIf { it >= date.toEpochDay() } ?: date.toEpochDay()
+                    t.copy(startDate = date.toEpochDay(), dueDate = due)
+                }
+            },
+        )
+    }
+    if (showPlace) {
+        PlacePickerDialog(
+            current = task.placeId,
+            places = snapshot.places,
+            onDismiss = { showPlace = false },
+            onPick = { placeId ->
+                showPlace = false
+                repo.update(task.id) { it.copy(placeId = placeId) }
+            },
+            repo = repo,
         )
     }
     if (showTime) {
@@ -497,7 +544,8 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
         PropertyRow(
             icon = Icons.Rounded.Notifications,
             label = "Remind",
-            value = if (task.date == null) "Add a date first" else Reminders.label(task.reminder, hasTime),
+            value = if (task.date == null) "Add a date first"
+            else Reminders.label(task.reminder, hasTime) + if (task.nag && task.reminder != null) ", repeats" else "",
             active = task.date != null && task.reminder != null,
             onClick = { if (task.date != null) open = true },
         )
@@ -513,6 +561,22 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
                     },
                 )
             }
+            androidx.compose.material3.HorizontalDivider(color = Palette.Hairline)
+            DropdownMenuItem(
+                leadingIcon = {
+                    Icon(
+                        if (task.nag) Icons.Rounded.Check else Icons.Rounded.Repeat,
+                        contentDescription = null,
+                        tint = if (task.nag) Palette.Lavender else Palette.TextSecondary,
+                    )
+                },
+                text = { Text("Keep reminding until done", color = Palette.TextPrimary) },
+                onClick = {
+                    open = false
+                    repo.update(task.id) { it.copy(nag = !task.nag, reminder = it.reminder ?: 0) }
+                    onReminderSet()
+                },
+            )
         }
     }
 }
