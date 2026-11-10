@@ -1,6 +1,7 @@
 package io.github.ryr05.noctil.data.model
 
 import androidx.compose.ui.graphics.Color
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -32,7 +33,31 @@ data class TaskItem(
     val subtaskDone: Int,
     val checklistTotal: Int,
     val checklistDone: Int,
-)
+    val durationMinutes: Int? = null,
+) {
+    /** Minutes the task takes up on the calendar. */
+    val blockMinutes: Int get() = durationMinutes ?: DEFAULT_TASK_MINUTES
+}
+
+const val DEFAULT_TASK_MINUTES = 30
+
+/** A weekly class from the timetable. */
+data class SchoolClass(
+    val id: Long,
+    val name: String,
+    val room: String,
+    val color: Color,
+    val days: Set<DayOfWeek>,
+    val start: LocalTime,
+    val end: LocalTime,
+    val listId: Long?,
+) {
+    fun meetsOn(date: LocalDate): Boolean = date.dayOfWeek in days
+}
+
+fun Set<DayOfWeek>.toMask(): Int = sumOf { 1 shl (it.value - 1) }
+
+fun daysFromMask(mask: Int): Set<DayOfWeek> = DayOfWeek.entries.filter { mask and (1 shl (it.value - 1)) != 0 }.toSet()
 
 /** Everything the screens need, rebuilt whenever the database changes. */
 data class Snapshot(
@@ -42,6 +67,7 @@ data class Snapshot(
     val tags: List<Tag>,
     val checklist: Map<Long, List<ChecklistItem>>,
     val loaded: Boolean,
+    val classes: List<SchoolClass> = emptyList(),
 ) {
     val byId: Map<Long, TaskItem> by lazy { tasks.associateBy { it.id } }
     val childrenOf: Map<Long, List<TaskItem>> by lazy {

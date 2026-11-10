@@ -3,6 +3,10 @@
 
     <!-- Reminders: show notifications, fire on time, and survive a reboot. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Calendar: show your phone's events, and optionally copy tasks into one calendar. Asked only when you turn it on. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission

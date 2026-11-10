@@ -1,6 +1,7 @@
 package io.github.ryr05.noctil
 
 import android.app.Application
+import io.github.ryr05.noctil.calendar.CalendarSync
 import io.github.ryr05.noctil.data.Repository
 import io.github.ryr05.noctil.data.db.NoctilDatabase
 import io.github.ryr05.noctil.reminders.LockscreenCard
@@ -30,8 +31,10 @@ class NoctilApplication : Application() {
             repository.snapshot.filter { it.loaded }.collectLatest {
                 delay(300) // wait for a burst of changes to settle
                 Surfaces.refreshAll(this@NoctilApplication)
+                CalendarSync.sync(this@NoctilApplication)
             }
         }
         Surfaces.scheduleMidnightRefresh(this)
+        CalendarSync.watch(this)
     }
 }

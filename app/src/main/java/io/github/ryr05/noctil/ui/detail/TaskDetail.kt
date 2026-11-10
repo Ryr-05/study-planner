@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.HourglassEmpty
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Schedule
@@ -268,6 +269,7 @@ private fun DetailContent(
                     onClick = { showTime = true },
                     onClear = if (task.time != null) ({ repo.update(task.id) { it.copy(dueTime = null) } }) else null,
                 )
+                if (task.time != null) DurationRow(task, repo)
                 RepeatRow(task, repo, today)
                 ReminderRow(task, repo, actions.onReminderSet)
                 ListRow(task, snapshot, repo)
@@ -409,6 +411,37 @@ private fun PropertyRow(
             SmallIconButton(Icons.Rounded.Close, "Clear $label", onClick = onClear)
         } else {
             Spacer(Modifier.width(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun DurationRow(task: TaskItem, repo: Repository) {
+    var open by remember { mutableStateOf(false) }
+    val options = listOf(15, 30, 45, 60, 90, 120, 180)
+    fun label(m: Int) = when {
+        m < 60 -> "$m min"
+        m % 60 == 0 -> if (m == 60) "1 hour" else "${m / 60} hours"
+        else -> "${m / 60} h ${m % 60} min"
+    }
+    Box {
+        PropertyRow(
+            icon = Icons.Rounded.HourglassEmpty,
+            label = "Length",
+            value = label(task.blockMinutes),
+            active = task.durationMinutes != null,
+            onClick = { open = true },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
+            options.forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(label(m), color = Palette.TextPrimary) },
+                    onClick = {
+                        open = false
+                        repo.setDuration(task.id, m)
+                    },
+                )
+            }
         }
     }
 }

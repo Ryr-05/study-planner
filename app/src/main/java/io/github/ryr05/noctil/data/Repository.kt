@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.room.withTransaction
 import io.github.ryr05.noctil.data.db.ChecklistEntity
+import io.github.ryr05.noctil.data.db.ClassEntity
 import io.github.ryr05.noctil.data.db.FolderEntity
 import io.github.ryr05.noctil.data.db.ListEntity
 import io.github.ryr05.noctil.data.db.NoctilDatabase
@@ -16,6 +17,9 @@ import io.github.ryr05.noctil.data.model.Folder
 import io.github.ryr05.noctil.data.model.ItemColors
 import io.github.ryr05.noctil.data.model.Priority
 import io.github.ryr05.noctil.data.model.Recurrence
+import io.github.ryr05.noctil.data.model.SchoolClass
+import io.github.ryr05.noctil.data.model.daysFromMask
+import io.github.ryr05.noctil.data.model.toMask
 import io.github.ryr05.noctil.data.model.Snapshot
 import io.github.ryr05.noctil.data.model.Tag
 import io.github.ryr05.noctil.data.model.TaskItem
@@ -35,6 +39,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+
 /** What to undo after finishing a task. */
 data class Completion(val taskId: Long, val createdNextId: Long?, val recurrence: String?)
 
@@ -49,7 +55,7 @@ fun LocalTime.toMinutes(): Int = hour * 60 + minute
  */
 class Repository(
     private val context: Context,
-    private val db: NoctilDatabase,
+    val db: NoctilDatabase,
     private val scheduler: ReminderScheduler,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -59,10 +65,10 @@ class Repository(
         combine(db.tasks().observeAll(), db.checklist().observeAll(), db.tags().observeLinks()) { t, c, l ->
             Triple(t, c, l)
         },
-        combine(db.lists().observeLists(), db.lists().observeFolders(), db.tags().observeTags()) { l, f, g ->
-            Triple(l, f, g)
-        },
-    ) { a, b -> buildSnapshot(a.first, a.second, a.third, b.first, b.second, b.third) }
+        combine(
+            db.lists().observeLists(), db.lists().observeFolders(), db.tags().observeTags(), db.classes().observeAll(),
+        ) { l, f, g, c -> Quad(l, f, g, c) },
+    ) { a, b -> buildSnapshot(a.first, a.second, a.third, b.a, b.b, b.c, b.d) }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, Snapshot.Empty)
 
@@ -211,6 +217,33 @@ class Repository(
             db.tasks().setDeleted(ids, false, System.currentTimeMillis())
             ids.forEach { id -> db.tasks().get(id)?.let(scheduler::schedule) }
         }
+    }
+
+    /** Places a task at a date and time, as when dragging it on the calendar. */
+    fun schedule(id: Long, date: LocalDate, time: LocalTime?) = update(id) { t ->
+        t.copy(dueDate = date.toEpochDay(), dueTime = time?.toMinutes(), reminder = t.reminder ?: 0)
+    }
+
+    fun setDuration(id: Long, minutes: Int?) = update(id) { it.copy(durationMinutes = minutes) }
+
+    // ---------- Timetable ----------
+
+    fun saveClass(
+        id: Long?, name: String, room: String, color: Color,
+        days: Set<java.time.DayOfWeek>, start: LocalTime, end: LocalTime, listId: Long?,
+    ) {
+        if (name.isBlank() || days.isEmpty() || !end.isAfter(start)) return
+        scope.launch {
+            val entity = ClassEntity(
+                id = id ?: 0, name = name.trim(), room = room.trim(), color = color.toArgb(),
+                days = days.toMask(), startMinute = start.toMinutes(), endMinute = end.toMinutes(), listId = listId,
+            )
+            if (id == null) db.classes().insert(entity) else db.classes().update(entity)
+        }
+    }
+
+    fun deleteClass(id: Long) {
+        scope.launch { db.classes().delete(id) }
     }
 
     // ---------- Checklist ----------
@@ -386,6 +419,7 @@ class Repository(
         lists: List<ListEntity>,
         folders: List<FolderEntity>,
         tags: List<TagEntity>,
+        classes: List<ClassEntity>,
     ): Snapshot {
         val listModels = lists.map { TaskList(it.id, it.name, Color(it.color), it.folderId) }
         val listById = listModels.associateBy { it.id }
@@ -419,6 +453,7 @@ class Repository(
                 subtaskDone = kids.count { it.done },
                 checklistTotal = items.size,
                 checklistDone = items.count { it.done },
+                durationMinutes = t.durationMinutes,
             )
         }
         return Snapshot(
@@ -428,6 +463,15 @@ class Repository(
             tags = tagModels,
             checklist = checklistByTask,
             loaded = true,
+            classes = classes.map {
+                SchoolClass(
+                    id = it.id, name = it.name, room = it.room, color = Color(it.color),
+                    days = daysFromMask(it.days),
+                    start = LocalTime.of(it.startMinute / 60, it.startMinute % 60),
+                    end = LocalTime.of(it.endMinute / 60, it.endMinute % 60),
+                    listId = it.listId,
+                )
+            },
         )
     }
 }

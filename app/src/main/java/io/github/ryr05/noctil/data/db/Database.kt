@@ -128,6 +128,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND reminder IS NOT NULL AND dueDate IS NOT NULL")
     suspend fun withReminders(): List<TaskEntity>
 
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND dueDate IS NOT NULL")
+    suspend fun withDates(): List<TaskEntity>
+
     @Query("SELECT id FROM tasks WHERE parentId = :parentId")
     suspend fun childIds(parentId: Long): List<Long>
 

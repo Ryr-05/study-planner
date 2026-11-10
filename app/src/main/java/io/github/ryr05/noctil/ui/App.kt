@@ -46,6 +46,18 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.data.model.Folder
+import io.github.ryr05.noctil.data.model.SchoolClass
+import io.github.ryr05.noctil.data.toMinutes
+import io.github.ryr05.noctil.parse.SmartParser
+import io.github.ryr05.noctil.ui.calendar.CalMode
+import io.github.ryr05.noctil.ui.calendar.CalendarActions
+import io.github.ryr05.noctil.ui.calendar.ClassEditorDialog
+import io.github.ryr05.noctil.ui.calendar.SlotSheet
+import io.github.ryr05.noctil.ui.calendar.SyncSheet
+import io.github.ryr05.noctil.ui.calendar.TimetableSheet
+import io.github.ryr05.noctil.ui.components.relativeDay
+import io.github.ryr05.noctil.ui.components.timeFormat
+import java.time.LocalTime
 import io.github.ryr05.noctil.data.model.Tag
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.model.TaskList
@@ -84,6 +96,8 @@ sealed interface LaunchRequest {
 
 private data class UndoMessage(val id: Long, val text: String, val undo: () -> Unit)
 
+private data class ClassEdit(val cls: SchoolClass?)
+
 private sealed interface Editor {
     data object NewList : Editor
     data class EditList(val list: TaskList) : Editor
@@ -113,6 +127,11 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
     var editor by remember { mutableStateOf<Editor?>(null) }
+    var calMode by rememberSaveable { mutableStateOf(CalMode.Month) }
+    var slot by remember { mutableStateOf<Pair<LocalDate, LocalTime>?>(null) }
+    var timetableOpen by rememberSaveable { mutableStateOf(false) }
+    var syncOpen by rememberSaveable { mutableStateOf(false) }
+    var classEditing by remember { mutableStateOf<ClassEdit?>(null) }
     var undo by remember { mutableStateOf<UndoMessage?>(null) }
     val hazeState = rememberHazeState()
 
@@ -207,10 +226,16 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
         },
     )
 
-    BackHandler(enabled = detailStack.isNotEmpty() || quickAddOpen || searchOpen || drawerOpen || tab != Tab.Tasks || view != TaskView.Today) {
+    BackHandler(
+        enabled = detailStack.isNotEmpty() || quickAddOpen || searchOpen || drawerOpen || slot != null ||
+            timetableOpen || syncOpen || tab != Tab.Tasks || view != TaskView.Today,
+    ) {
         when {
             detailStack.isNotEmpty() -> detailStack = detailStack.dropLast(1)
             quickAddOpen -> quickAddOpen = false
+            slot != null -> slot = null
+            timetableOpen -> timetableOpen = false
+            syncOpen -> syncOpen = false
             searchOpen -> searchOpen = false
             drawerOpen -> drawerOpen = false
             tab != Tab.Tasks -> tab = Tab.Tasks
@@ -237,8 +262,26 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                             snapshot = snapshot,
                             today = today,
                             selected = calendarDay,
-                            onSelect = { calendarDay = it },
-                            actions = taskActions,
+                            mode = calMode,
+                            taskActions = taskActions,
+                            actions = CalendarActions(
+                                onSelect = { calendarDay = it },
+                                onMode = { calMode = it },
+                                onSlot = { d, t -> slot = d to t },
+                                onMoveTask = { task, d, t ->
+                                    val previousDate = task.date
+                                    val previousTime = task.time
+                                    repo.schedule(task.id, d, t)
+                                    showUndo("Moved to ${relativeDay(d, today)}, ${t.format(timeFormat)}") {
+                                        repo.update(task.id) {
+                                            it.copy(dueDate = previousDate?.toEpochDay(), dueTime = previousTime?.toMinutes())
+                                        }
+                                    }
+                                },
+                                onOpenClass = { classEditing = ClassEdit(it) },
+                                onOpenTimetable = { timetableOpen = true },
+                                onOpenSync = { syncOpen = true },
+                            ),
                         )
                         Tab.Focus -> FocusScreen()
                         Tab.Me -> MeScreen(
@@ -303,6 +346,35 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 onDismiss = { drawerOpen = false },
             )
 
+            SlotSheet(
+                slot = slot,
+                snapshot = snapshot,
+                today = today,
+                onDismiss = { slot = null },
+                onPlace = { task, d, t ->
+                    slot = null
+                    repo.schedule(task.id, d, t)
+                    askForNotificationsOnce()
+                },
+                onCreate = { text, d, t ->
+                    slot = null
+                    val parsed = SmartParser.parse(text, java.time.LocalDateTime.now(), defaultDate = d)
+                    repo.addTask(parsed.copy(time = parsed.time ?: t), null) { id ->
+                        showUndo("Added \"${parsed.title}\"") { repo.delete(id) }
+                    }
+                    askForNotificationsOnce()
+                },
+            )
+
+            TimetableSheet(
+                visible = timetableOpen,
+                snapshot = snapshot,
+                onDismiss = { timetableOpen = false },
+                onEdit = { classEditing = ClassEdit(it) },
+            )
+
+            SyncSheet(visible = syncOpen, onDismiss = { syncOpen = false })
+
             val quickAddDefaultDate = when {
                 tab == Tab.Calendar -> calendarDay
                 tab != Tab.Tasks -> today
@@ -348,6 +420,19 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 ),
             )
         }
+    }
+
+    classEditing?.let { edit ->
+        ClassEditorDialog(
+            initial = edit.cls,
+            lists = snapshot.lists,
+            onDismiss = { classEditing = null },
+            onSave = { name, room, color, days, start, end, listId ->
+                classEditing = null
+                repo.saveClass(edit.cls?.id, name, room, color, days, start, end, listId)
+            },
+            onDelete = edit.cls?.let { cls -> { classEditing = null; repo.deleteClass(cls.id) } },
+        )
     }
 
     when (val e = editor) {

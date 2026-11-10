@@ -43,7 +43,10 @@ priority, tag, list and repeat, and highlights them as you type.
 | Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change |
 | Search | Titles, notes, checklist items, tags and list names |
 | Exams | Tag a task `#exam` (or name it "midterm", "quiz"...) to get a countdown on Today |
-| Calendar | Month view with task markers. Tap a day to see and add tasks |
+| Calendar | Day, week, month and year views. Classes, phone events and tasks together |
+| Time blocking | Tap an empty time to plan a task there. Long-press a task and drag it to a new time or day |
+| Timetable | Enter each class once (days, time, room, color) and it shows every week |
+| Phone calendars | See your Google, Samsung or Outlook events. Optionally copy dated tasks into one of them, two-way |
 | Focus | Pomodoro timer (25 / 5 / 15 minutes) |
 | Widgets | Today list (finish tasks from the home screen), month calendar, exam countdown, quick add bar |
 | Lockscreen | A silent Today card on your lockscreen, with an Add task button. Turn it off in Me |
@@ -52,7 +55,7 @@ priority, tag, list and repeat, and highlights them as you type.
 
 **Adding widgets:** open **Me > Lockscreen and widgets** and tap **Add** next to any widget.
 
-Coming next: week and day calendar views, class timetable, and two-way sync with your phone's calendars.
+Coming next: the focus timer upgrade (lockscreen countdown, white noise), habits and statistics.
 
 See [PLAN.md](PLAN.md) for the full roadmap.
 
