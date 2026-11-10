@@ -150,6 +150,7 @@ dependencies {
     implementation(libs.credentials.play)
     implementation(libs.googleid)
     implementation(libs.coroutines.play)
+    implementation(libs.play.location)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

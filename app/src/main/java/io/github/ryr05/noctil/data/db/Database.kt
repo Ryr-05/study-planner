@@ -1,6 +1,7 @@
 package io.github.ryr05.noctil.data.db
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -62,6 +63,34 @@ data class TaskEntity(
     val deleted: Boolean = false,
     /** How long the task blocks out on the calendar, in minutes. Null means the default (30). */
     val durationMinutes: Int? = null,
+    /** Board column. Null is "To Do"; done tasks are always in "Done". */
+    val stageId: Long? = null,
+    /** When work starts, for the timeline. Days since 1970-01-01. */
+    val startDate: Long? = null,
+    /** Keep reminding every few minutes until the task is handled. */
+    @ColumnInfo(defaultValue = "0") val nag: Boolean = false,
+    /** Remind when arriving at this saved place. */
+    val placeId: Long? = null,
+)
+
+/** A custom board column, like "Doing" or "Review". */
+@Entity(tableName = "board_stages")
+data class StageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val sortOrder: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+/** A saved place for location reminders. Stays on the phone (and your own cloud copy if you sign in). */
+@Entity(tableName = "places")
+data class PlaceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val radius: Int = 150,
+    val updatedAt: Long = System.currentTimeMillis(),
 )
 
 @Entity(tableName = "checklist", indices = [Index("taskId")])
@@ -471,15 +500,48 @@ interface SyncDao {
     @Query("DELETE FROM focus_sessions WHERE id = :id") suspend fun deleteFocus(id: Long)
 }
 
+@Dao
+interface BoardDao {
+    @Query("SELECT * FROM board_stages ORDER BY sortOrder, id")
+    fun observeStages(): Flow<List<StageEntity>>
+
+    @Query("SELECT * FROM places ORDER BY name COLLATE NOCASE")
+    fun observePlaces(): Flow<List<PlaceEntity>>
+
+    @Query("SELECT * FROM board_stages") suspend fun stages(): List<StageEntity>
+    @Query("SELECT * FROM places") suspend fun places(): List<PlaceEntity>
+    @Query("SELECT * FROM board_stages WHERE id = :id") suspend fun stage(id: Long): StageEntity?
+    @Query("SELECT * FROM places WHERE id = :id") suspend fun place(id: Long): PlaceEntity?
+    @Query("SELECT COUNT(*) FROM board_stages") suspend fun stageCount(): Int
+
+    @Insert suspend fun insertStage(e: StageEntity): Long
+    @Update suspend fun updateStage(e: StageEntity)
+    @Query("DELETE FROM board_stages WHERE id = :id") suspend fun deleteStage(id: Long)
+    @Query("UPDATE tasks SET stageId = NULL, updatedAt = :now WHERE stageId = :id") suspend fun clearStage(id: Long, now: Long)
+
+    @Insert suspend fun insertPlace(e: PlaceEntity): Long
+    @Update suspend fun updatePlace(e: PlaceEntity)
+    @Query("DELETE FROM places WHERE id = :id") suspend fun deletePlace(id: Long)
+    @Query("UPDATE tasks SET placeId = NULL, updatedAt = :now WHERE placeId = :id") suspend fun clearPlace(id: Long, now: Long)
+
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND placeId IS NOT NULL")
+    suspend fun tasksWithPlaces(): List<TaskEntity>
+
+    @Insert suspend fun insertStages(items: List<StageEntity>)
+    @Insert suspend fun insertPlaces(items: List<PlaceEntity>)
+    @Query("DELETE FROM board_stages") suspend fun clearStages()
+    @Query("DELETE FROM places") suspend fun clearPlaces()
+}
+
 @Database(
     entities = [
         FolderEntity::class, ListEntity::class, TaskEntity::class,
         ChecklistEntity::class, TagEntity::class, TaskTagEntity::class,
         ClassEntity::class, CalendarLinkEntity::class,
         FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
-        SyncMapEntity::class,
+        SyncMapEntity::class, StageEntity::class, PlaceEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -493,11 +555,12 @@ abstract class NoctilDatabase : RoomDatabase() {
     abstract fun habits(): HabitDao
     abstract fun backup(): BackupDao
     abstract fun sync(): SyncDao
+    abstract fun board(): BoardDao
 
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }
@@ -553,5 +616,23 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
                 "`remoteId` TEXT NOT NULL, `hash` INTEGER NOT NULL, PRIMARY KEY(`tableName`, `localKey`))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_map_tableName_remoteId` ON `sync_map` (`tableName`, `remoteId`)")
+    }
+}
+
+/** Version 4 to 5 (Phase 6): board columns, start dates, keep-reminding, and places. Existing data is kept. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `stageId` INTEGER")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `startDate` INTEGER")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `nag` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `placeId` INTEGER")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `board_stages` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `places` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, " +
+                "`latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `radius` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        )
     }
 }

@@ -14,6 +14,7 @@ firebaseBom = "34.19.0"
 credentials = "1.5.0"
 googleId = "1.1.1"
 coroutinesPlay = "1.10.2"
+playLocation = "21.3.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -39,6 +40,7 @@ firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
 credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
 credentials-play = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleId" }
+play-location = { module = "com.google.android.gms:play-services-location", version.ref = "playLocation" }
 coroutines-play = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutinesPlay" }
 
 [plugins]
