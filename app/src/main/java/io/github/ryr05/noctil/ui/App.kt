@@ -76,6 +76,8 @@ import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.model.TaskList
 import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
+import io.github.ryr05.noctil.reminders.StartReminders
+import io.github.ryr05.noctil.ui.quickadd.AddSeveralSheet
 import io.github.ryr05.noctil.ui.calendar.CalendarScreen
 import io.github.ryr05.noctil.ui.components.AuroraBackground
 import io.github.ryr05.noctil.ui.detail.DetailActions
@@ -167,6 +169,8 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var detailStack by rememberSaveable { mutableStateOf(listOf<Long>()) }
     var quickAddOpen by rememberSaveable { mutableStateOf(false) }
     var quickAddText by rememberSaveable { mutableStateOf("") }
+    var severalOpen by rememberSaveable { mutableStateOf(false) }
+    var severalText by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var drawerOpen by rememberSaveable { mutableStateOf(false) }
     var editor by remember { mutableStateOf<Editor?>(null) }
@@ -284,6 +288,23 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                 repo.update(task.id) { it.copy(dueDate = previousDate?.toEpochDay(), reminder = previousReminder) }
             }
         },
+        onStartFocus = { task ->
+            detailStack = emptyList()
+            tab = Tab.Focus
+            FocusEngine.setTask(context, task.id)
+            FocusEngine.start(context)
+        },
+        onStartTomorrow = { task ->
+            val previous = task.startAt
+            val next = today.plusDays(1).atTime(previous?.toLocalTime() ?: StartReminders.EVENING)
+            val deadline = task.date?.atTime(task.time ?: java.time.LocalTime.MAX)
+            if (deadline != null && !next.isBefore(deadline)) {
+                showUndo("It's due by then, so start today") {}
+            } else {
+                repo.setStart(task.id, next)
+                showUndo("Start moved to tomorrow") { repo.setStart(task.id, previous) }
+            }
+        },
         onSelect = { task ->
             val current = selection ?: emptySet()
             val next = if (task.id in current) current - task.id else current + task.id
@@ -348,7 +369,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     )
 
     BackHandler(
-        enabled = detailStack.isNotEmpty() || quickAddOpen || searchOpen || drawerOpen || slot != null ||
+        enabled = detailStack.isNotEmpty() || quickAddOpen || severalOpen || searchOpen || drawerOpen || slot != null ||
             timetableOpen || syncOpen || habitOpenId != null || statsOpen || planOpen || selection != null ||
             tab != Tab.Tasks || view != TaskView.Today,
     ) {
@@ -356,6 +377,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             detailStack.isNotEmpty() -> detailStack = detailStack.dropLast(1)
             selection != null -> selection = null
             quickAddOpen -> quickAddOpen = false
+            severalOpen -> severalOpen = false
             slot != null -> slot = null
             habitOpenId != null -> habitOpenId = null
             statsOpen -> statsOpen = false
@@ -580,6 +602,34 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                         showUndo("Added \"${parsed.title}\"") { repo.delete(id) }
                     }
                     if (parsed.date != null) askForNotificationsOnce()
+                },
+                onAddSeveral = { typed ->
+                    quickAddOpen = false
+                    severalText = typed
+                    severalOpen = true
+                },
+            )
+
+            AddSeveralSheet(
+                visible = severalOpen,
+                initialText = severalText,
+                snapshot = snapshot,
+                today = today,
+                onDismiss = { severalOpen = false },
+                onAdd = { tasks ->
+                    severalOpen = false
+                    if (tab == Tab.Focus || tab == Tab.Me || tab == Tab.Habits) tab = Tab.Tasks
+                    val added = mutableListOf<Long>()
+                    tasks.forEach { parsed ->
+                        repo.addTask(parsed, quickAddList) { id ->
+                            added += id
+                            if (added.size == tasks.size) {
+                                val ids = added.toList()
+                                showUndo(if (ids.size == 1) "Added 1 task" else "Added ${ids.size} tasks") { repo.deleteMany(ids) }
+                            }
+                        }
+                    }
+                    if (tasks.any { it.date != null }) askForNotificationsOnce()
                 },
             )
 

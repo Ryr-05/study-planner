@@ -22,7 +22,8 @@ import java.util.Locale
 
 /**
  * AI planning with Google's Gemini (through Firebase AI Logic, free tier). Off until the student
- * turns it on. Only the tasks they picked are sent: title, date, time, priority and length.
+ * turns it on. Sent: what they type, and the title, dates, start time, priority and length of the
+ * tasks they picked plus their open tasks for the next two weeks. Never notes, checklists or places.
  */
 object AiPlanning {
     /** Gemini model used for planning. Flash-Lite is fast and in the free tier. */
@@ -80,6 +81,7 @@ data class AiReply(
     val minutesAvailable: Int? = null,
     val lengths: Map<Long, Int> = emptyMap(),
     val favored: Set<Long> = emptySet(),
+    val changes: List<AiChange> = emptyList(),
 ) {
     companion object {
         fun parse(json: String): AiReply {
@@ -100,6 +102,9 @@ data class AiReply(
                 minutesAvailable = minutes?.takeIf { it == Planner.REST_OF_DAY || it in 5..16 * 60 },
                 lengths = lengths,
                 favored = favored,
+                changes = o.optJSONArray("changes")?.let { a ->
+                    (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let(AiChange::parse) }
+                }.orEmpty().take(20),
             )
         }
     }
@@ -126,8 +131,14 @@ class GeminiPlanner {
      * Sends the student's message with the picked tasks and what's known so far. Throws if
      * Gemini can't be reached, so the caller can fall back to the offline planner.
      */
-    suspend fun send(message: String, picked: List<TaskItem>, answers: Planner.Answers, now: LocalDateTime): AiReply {
-        val ctx = contextBlock(picked, answers, now)
+    suspend fun send(
+        message: String,
+        picked: List<TaskItem>,
+        answers: Planner.Answers,
+        now: LocalDateTime,
+        others: List<TaskItem> = emptyList(),
+    ): AiReply {
+        val ctx = contextBlock(picked, answers, now, others)
         val turn = content(role = "user") { text("$ctx\n\nStudent: $message") }
         val response = model.generateContent(history + turn)
         val raw = response.text ?: error("Empty reply")
@@ -139,7 +150,18 @@ class GeminiPlanner {
         return reply
     }
 
-    private fun contextBlock(picked: List<TaskItem>, answers: Planner.Answers, now: LocalDateTime): String {
+    private fun contextBlock(picked: List<TaskItem>, answers: Planner.Answers, now: LocalDateTime, others: List<TaskItem>): String {
+        val yours = JSONArray()
+        others.filter { o -> picked.none { it.id == o.id } }.forEach { t ->
+            yours.put(
+                JSONObject()
+                    .put("id", t.id)
+                    .put("title", t.title)
+                    .put("due_date", t.date?.toString() ?: JSONObject.NULL)
+                    .put("due_time", t.time?.toString() ?: JSONObject.NULL)
+                    .put("planned_start", t.startAt?.toString() ?: JSONObject.NULL),
+            )
+        }
         val tasks = JSONArray()
         picked.forEach { t ->
             tasks.put(
@@ -157,7 +179,7 @@ class GeminiPlanner {
             .put("minutes_available", answers.minutesAvailable ?: JSONObject.NULL)
             .put("favored_ids", JSONArray(answers.favored.toList()))
         return "CONTEXT\nnow: ${now.format(DateTimeFormatter.ofPattern("EEEE yyyy-MM-dd HH:mm"))}\n" +
-            "picked_tasks: $tasks\nknown: $known"
+            "picked_tasks: $tasks\nyour_tasks: $yours\nknown: $known"
     }
 
     companion object {
@@ -168,7 +190,7 @@ class GeminiPlanner {
             If asked for anything else, say in one short sentence that you can only help plan and remind, then steer back to planning.
 
             Rules:
-            - Use only the tasks in picked_tasks or tasks the student types. Never invent tasks, dates or facts.
+            - Use only the tasks in picked_tasks, your_tasks or tasks the student types. Never invent tasks, dates or facts.
             - Whenever the student mentions tasks that are not already in picked_tasks, put each one in new_tasks in that same reply,
               as a single line written like quick add: the title plus its date, time and priority words, for example
               "Lab report tomorrow 9am !1" or "Chem midterm tue #exam". Never repeat tasks already in picked_tasks.
@@ -184,8 +206,15 @@ class GeminiPlanner {
               and offer options.
             - Good order: overdue and due soon first, study time before exams, high priority first, quick wins when time is short.
             - If the student wants reminders for the plan, use action "remind".
-            - The app carries out every action and confirms it itself. Never say you added tasks, made a schedule or set
-              reminders; with "plan", briefly say what to start with and why, in one or two sentences.
+            - Changing tasks: only when the student asks. Find the task by title in picked_tasks or your_tasks and use its id.
+              To change when they start a task (its start reminder), use action "change" and put {id, start} in changes,
+              with start as "YYYY-MM-DDTHH:MM", or "none" to remove it. A start must be before the task's deadline.
+            - Deadlines are special: fill due_date or due_time ONLY when the student explicitly asks to change a deadline or
+              due date (for example "my professor extended the essay to Friday"). Moving a start time never changes the
+              deadline. If they only say they'll do it later, change the start, not the deadline.
+            - You can't delete tasks or mark them done. If asked, say they can do that in the app.
+            - The app carries out every action and confirms it itself. Never say you added or changed tasks, made a schedule
+              or set reminders; with "plan", briefly say what to start with and why, in one or two sentences.
             - Otherwise use action "chat".
             - Keep reply to 1 to 3 short, warm sentences in plain English. No emoji. Do not use em dashes.
             - Never ask for personal information.
@@ -194,7 +223,7 @@ class GeminiPlanner {
         private val SCHEMA = Schema.obj(
             properties = mapOf(
                 "reply" to Schema.string(description = "1 to 3 short sentences to the student"),
-                "action" to Schema.enumeration(listOf("chat", "ask", "add_tasks", "plan", "remind")),
+                "action" to Schema.enumeration(listOf("chat", "ask", "add_tasks", "plan", "remind", "change")),
                 "options" to Schema.array(Schema.string(), description = "2 to 5 short tap-able answers when action is ask"),
                 "new_tasks" to Schema.array(Schema.string(), description = "New tasks the student mentioned, quick-add style, one per item"),
                 "minutes_available" to Schema.integer(description = "Free minutes right now, -1 for the rest of the day"),
@@ -203,8 +232,20 @@ class GeminiPlanner {
                     description = "How long tasks take, by task id, whenever the student said so",
                 ),
                 "favored_ids" to Schema.array(Schema.long(), description = "Ids of tasks the student said matter more or come first"),
+                "changes" to Schema.array(
+                    Schema.obj(
+                        mapOf(
+                            "id" to Schema.long(),
+                            "start" to Schema.string(description = "New start as YYYY-MM-DDTHH:MM, or none to remove it"),
+                            "due_date" to Schema.string(description = "YYYY-MM-DD, only if the student asked to change the deadline"),
+                            "due_time" to Schema.string(description = "HH:MM, only if the student asked to change the deadline"),
+                        ),
+                        optionalProperties = listOf("start", "due_date", "due_time"),
+                    ),
+                    description = "Changes to existing tasks the student asked for",
+                ),
             ),
-            optionalProperties = listOf("options", "new_tasks", "minutes_available"),
+            optionalProperties = listOf("options", "new_tasks", "minutes_available", "changes"),
         )
     }
 }

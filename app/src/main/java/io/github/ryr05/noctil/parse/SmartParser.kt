@@ -197,8 +197,10 @@ object SmartParser {
                 val rest = input.substring(after)
                 // The start is the date and time right after the word, nothing further along.
                 var end = 0
+                val seen = mutableSetOf<TokenKind>()
                 for (t in parse(rest, now, DATE_TIME_ONLY, null, locale, findStart = false).tokens) {
-                    if (!rGap.matches(rest.substring(end, t.start))) break
+                    // One date and one time at most: "start thu fri" means start Thu, due Fri.
+                    if (!rGap.matches(rest.substring(end, t.start)) || !seen.add(t.kind)) break
                     end = t.end
                 }
                 if (end == 0) continue

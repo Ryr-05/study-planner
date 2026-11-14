@@ -14,6 +14,7 @@ import io.github.ryr05.noctil.Launch
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.R
 import io.github.ryr05.noctil.data.db.TaskEntity
+import io.github.ryr05.noctil.data.model.Priority
 import io.github.ryr05.noctil.data.localDate
 import io.github.ryr05.noctil.data.localTime
 import io.github.ryr05.noctil.data.startAt
@@ -42,15 +43,78 @@ object StartReminders {
     /** The time a suggested start lands on, the evening before the deadline. */
     val EVENING: LocalTime = LocalTime.of(19, 0)
 
+    /** How big a task looks, which decides how early to suggest starting. */
+    enum class Size { Tiny, Normal, Big }
+
+    private val bigWords = Regex(
+        "\\b(essays?|papers?|projects?|reports?|presentations?|thesis|dissertation|research|portfolio|" +
+            "study|studying|review|revise|revision|chapters?|lab\\s+reports?|capstone|proposal|draft)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+    private val tinyWords = Regex(
+        "^\\s*(email|e-mail|call|text|message|reply|pay|buy|print|sign|book|pick\\s+up|return|drop\\s+off|" +
+            "renew|register|rsvp|remind|ask|tell|send|check)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Exams, essays and long tasks are Big; "email prof", "pay rent" and 15-minute jobs are Tiny. */
+    fun sizeOf(title: String, tags: Collection<String>, priority: Priority, minutes: Int?): Size = when {
+        io.github.ryr05.noctil.data.model.looksLikeExam(title, tags) -> Size.Big
+        minutes != null && minutes >= 90 -> Size.Big
+        bigWords.containsMatchIn(title) -> Size.Big
+        priority == Priority.High -> Size.Big
+        minutes != null && minutes <= 15 -> Size.Tiny
+        tinyWords.containsMatchIn(title) -> Size.Tiny
+        else -> Size.Normal
+    }
+
+    /** "Start [daysBefore] days before the deadline at [time]". */
+    data class Lead(val daysBefore: Int, val time: LocalTime) {
+        fun encode() = "$daysBefore@${time.toSecondOfDay() / 60}"
+
+        companion object {
+            fun decode(s: String): Lead? {
+                val (d, m) = s.split("@").takeIf { it.size == 2 } ?: return null
+                val days = d.toIntOrNull()?.takeIf { it in 0..14 } ?: return null
+                val minutes = m.toIntOrNull()?.takeIf { it in 0 until 24 * 60 } ?: return null
+                return Lead(days, LocalTime.of(minutes / 60, minutes % 60))
+            }
+
+            /** How far [start] is ahead of [dueDate], as a Lead. */
+            fun of(start: LocalDateTime, dueDate: LocalDate): Lead? {
+                val days = java.time.temporal.ChronoUnit.DAYS.between(start.toLocalDate(), dueDate).toInt()
+                return if (days in 0..14) Lead(days, start.toLocalTime().withSecond(0).withNano(0)) else null
+            }
+        }
+    }
+
+    /** Big tasks start 2 evenings ahead, normal ones the evening before, tiny ones need no nudge. */
+    fun defaultLead(size: Size): Lead? = when (size) {
+        Size.Big -> Lead(2, EVENING)
+        Size.Normal -> Lead(1, EVENING)
+        Size.Tiny -> null
+    }
+
     /**
-     * The start time quick add suggests for a deadline: 7 PM the day before. Null when that is
-     * already past or isn't before the deadline, or the task repeats (a weekly task doesn't need it).
+     * The start time quick add suggests for a deadline. Starts from [lead] (the evening before by
+     * default) and moves closer when that's already past, but never to the deadline's own day.
+     * Null when nothing fits, there is no lead, or the task repeats (a weekly task doesn't need it).
      */
-    fun suggest(dueDate: LocalDate?, dueTime: LocalTime?, repeats: Boolean, now: LocalDateTime): LocalDateTime? {
-        if (dueDate == null || repeats) return null
-        val start = dueDate.minusDays(1).atTime(EVENING)
+    fun suggest(
+        dueDate: LocalDate?,
+        dueTime: LocalTime?,
+        repeats: Boolean,
+        now: LocalDateTime,
+        lead: Lead? = Lead(1, EVENING),
+    ): LocalDateTime? {
+        if (dueDate == null || repeats || lead == null) return null
         val deadline = dueDate.atTime(dueTime ?: LocalTime.MAX)
-        return start.takeIf { it.isAfter(now) && it.isBefore(deadline) }
+        val minDays = if (lead.daysBefore == 0) 0 else 1
+        for (days in lead.daysBefore downTo minDays) {
+            val start = dueDate.minusDays(days.toLong()).atTime(lead.time)
+            if (start.isAfter(now) && start.isBefore(deadline)) return start
+        }
+        return null
     }
 
     /** A quick choice in the Start menu. [hint] is "1 day before" and so on, when it's tied to the deadline. */

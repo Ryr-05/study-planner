@@ -444,4 +444,11 @@ class SmartParserTest {
         assertEquals(d(11, 13), r.date)
         assertEquals("Essay start thu", r.title)
     }
+
+    @Test fun startTakesOneDayThenTheDeadline() {
+        val r = p("Essay start thu fri")
+        assertEquals(d(11, 12).atTime(19, 0), r.startAt)
+        assertEquals(d(11, 13), r.date)
+        assertEquals("Essay", r.title)
+    }
 }

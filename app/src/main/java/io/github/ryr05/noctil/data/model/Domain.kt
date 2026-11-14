@@ -115,6 +115,8 @@ private val examWords = Regex("\\b(exams?|midterms?|finals?|quiz(zes)?|tests?)\\
 private val examTags = setOf("exam", "exams", "test", "quiz", "midterm", "final")
 
 /** Tagged #exam (or #test, #quiz...) or named like one ("Chem midterm"). */
-fun TaskItem.looksLikeExam(): Boolean =
-    tags.any { it.name.lowercase() in examTags } || examWords.containsMatchIn(title)
+fun TaskItem.looksLikeExam(): Boolean = looksLikeExam(title, tags.map { it.name })
+
+fun looksLikeExam(title: String, tagNames: Collection<String>): Boolean =
+    tagNames.any { it.lowercase() in examTags } || examWords.containsMatchIn(title)
 

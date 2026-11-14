@@ -74,6 +74,10 @@ data class TaskActions(
     val onSelect: ((TaskItem) -> Unit)? = null,
     /** Opens quick add with this text already typed (from the examples on empty screens). */
     val onQuickAdd: (String) -> Unit = {},
+    /** "Start" on a task in Start today: focus on it now. */
+    val onStartFocus: (TaskItem) -> Unit = {},
+    /** Left swipe in Start today: start tomorrow instead. The deadline stays put. */
+    val onStartTomorrow: (TaskItem) -> Unit = {},
 )
 
 @Composable
@@ -281,8 +285,11 @@ private fun LazyListScope.renderSection(
         }
     }
     if (isOpen) {
+        val starting = section.key == "startToday"
         itemsIndexed(section.tasks, key = { _, t -> "${section.key}-${t.id}" }) { index, task ->
             TaskRow(
+                onStart = if (starting) actions.onStartFocus else null,
+                swipeLeftLabel = if (starting) "Start tomorrow" else "Tomorrow",
                 task = task,
                 index = index,
                 count = section.tasks.size,
@@ -291,7 +298,7 @@ private fun LazyListScope.renderSection(
                 showList = showList,
                 onToggle = actions.onToggle,
                 onOpen = actions.onOpen,
-                onMoveToTomorrow = actions.onMoveToTomorrow,
+                onMoveToTomorrow = if (starting) actions.onStartTomorrow else actions.onMoveToTomorrow,
                 modifier = Modifier.animateItem(),
                 selection = selection,
                 onSelect = actions.onSelect,

@@ -81,7 +81,14 @@ import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.focus.FocusEngine
 import io.github.ryr05.noctil.focus.FocusKind
 import io.github.ryr05.noctil.parse.SmartParser
+import io.github.ryr05.noctil.plan.AiChange
+import io.github.ryr05.noctil.plan.AiChangeGuard
 import io.github.ryr05.noctil.plan.PlanReminders
+import io.github.ryr05.noctil.reminders.StartHabits
+import io.github.ryr05.noctil.reminders.StartReminders
+import io.github.ryr05.noctil.data.startAt
+import io.github.ryr05.noctil.data.toMinutes
+import io.github.ryr05.noctil.data.withStart
 import io.github.ryr05.noctil.plan.Planner
 import io.github.ryr05.noctil.reminders.Notifications
 import io.github.ryr05.noctil.ui.components.GlassSheet
@@ -99,6 +106,10 @@ sealed interface ChatMessage {
     data object PickTasks : ChatMessage
     data class Ask(val question: Planner.Question, val answer: String? = null) : ChatMessage
     data class Result(val plan: Planner.Plan, val from: LocalDateTime) : ChatMessage
+    /** Start times the AI moved, with Undo. */
+    data class Changed(val text: String, val edits: List<AiChangeGuard.StartEdit>, val undone: Boolean = false) : ChatMessage
+    /** A deadline change the student asked for, waiting for them to confirm. */
+    data class ConfirmDeadline(val edits: List<AiChangeGuard.DeadlineEdit>, val answer: Boolean? = null) : ChatMessage
 }
 
 /**
@@ -122,6 +133,9 @@ class PlanSession(private val context: Context) {
     private var lastPlan: Planner.Plan? = null
     private var gemini = GeminiPlanner()
     private var asks = 0
+    // What the AI was last shown and asked, for the app's own checks on any change it suggests.
+    private var lastKnown: Map<Long, TaskItem> = emptyMap()
+    private var lastStudentMessage = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val repo get() = (context.applicationContext as NoctilApplication).repository
 
@@ -152,7 +166,7 @@ class PlanSession(private val context: Context) {
         ai = on && AiPlanning.status(context) == AiPlanning.Status.Ready
         messages += ChatMessage.Bot(
             when {
-                ai -> "AI planning is on. Only the tasks you pick are sent to Gemini."
+                ai -> "AI is on. Gemini sees the tasks you pick and your next two weeks of tasks (titles and dates), so you can say things like \"start the essay tonight\"."
                 on && AiPlanning.status(context) == AiPlanning.Status.Region -> "AI planning isn't offered in your region, so I'll keep planning offline."
                 on && AiPlanning.status(context) == AiPlanning.Status.Limit -> "AI planning is resting until tomorrow. I'll plan offline for now."
                 else -> "AI planning is off. I'll plan on your phone."
@@ -209,11 +223,18 @@ class PlanSession(private val context: Context) {
         }
     }
 
+    /** Same start suggestion as quick add, so a task added here gets its "time to start" nudge too. */
+    private fun withSuggestedStart(p: io.github.ryr05.noctil.parse.ParsedInput, now: LocalDateTime) =
+        if (p.startAt != null) p else {
+            val size = StartReminders.sizeOf(p.title, p.tags, p.priority, p.durationMinutes)
+            p.copy(startAt = StartReminders.suggest(p.date, p.time, p.recurrence != null, now, StartHabits.leadFor(context, size)))
+        }
+
     /** Adds each line as a task (parsed like quick add) and picks it. Returns short labels. */
     private fun addTasks(lines: List<String>): List<String> {
         val now = LocalDateTime.now()
         return lines.map { it.trim() }.filter { it.isNotEmpty() }.map { line ->
-            val parsed = SmartParser.parse(line, now)
+            val parsed = withSuggestedStart(SmartParser.parse(line, now), now)
             repo.addTask(parsed, listId = null) { id -> selected = selected + id }
             buildString {
                 append(parsed.title)
@@ -308,9 +329,13 @@ class PlanSession(private val context: Context) {
         }
         thinking = true
         AiPlanning.countOne(context)
+        val picked = tasks(snapshot)
+        val others = AiChangeGuard.visibleTasks(snapshot.tasks, LocalDate.now())
+        lastKnown = (picked + others).associateBy { it.id }
+        lastStudentMessage = text
         scope.launch {
             val reply = runCatching {
-                withTimeout(50_000) { withContext(Dispatchers.IO) { gemini.send(text, tasks(snapshot), answers, LocalDateTime.now()) } }
+                withTimeout(50_000) { withContext(Dispatchers.IO) { gemini.send(text, picked, answers, LocalDateTime.now(), others) } }
             }
             // Tasks Gemini picked out of the message are added first, so the plan can include them.
             val added = reply.getOrNull()?.newTasks?.takeIf { it.isNotEmpty() }?.let { lines ->
@@ -347,7 +372,7 @@ class PlanSession(private val context: Context) {
         val now = LocalDateTime.now()
         val labels = mutableListOf<String>()
         val pending = lines.map { it.trim() }.filter { it.isNotEmpty() }.map { line ->
-            val parsed = SmartParser.parse(line, now)
+            val parsed = withSuggestedStart(SmartParser.parse(line, now), now)
             labels += buildString {
                 append(parsed.title)
                 parsed.date?.let { append(" (").append(relativeDay(it, now.toLocalDate())); parsed.time?.let { t -> append(", ").append(t.format(timeFormat)) }; append(")") }
@@ -362,6 +387,12 @@ class PlanSession(private val context: Context) {
 
     private fun apply(r: AiReply, snapshot: Snapshot, added: List<String> = emptyList()) {
         if (added.isNotEmpty()) messages += ChatMessage.Bot("Added to your tasks: " + added.joinToString(", ") + ".")
+        if (r.action == "change") {
+            // Only the app says what changed, so the chat can't claim a change that didn't happen.
+            applyChanges(r.changes, expected = true)
+            return
+        }
+        if (r.changes.isNotEmpty()) applyChanges(r.changes, expected = false)
         answers = answers.copy(
             minutesAvailable = r.minutesAvailable ?: answers.minutesAvailable,
             lengths = answers.lengths + r.lengths.filterKeys { it in selected },
@@ -379,6 +410,67 @@ class PlanSession(private val context: Context) {
             "remind" -> lastPlan?.let { remind(it) } ?: run { messages += ChatMessage.Bot("Let's make a plan first, then I can remind you.") }
             else -> messages += ChatMessage.Bot(r.reply)
         }
+    }
+
+    /**
+     * Carries out the AI's changes after the app's own checks: start times right away (with
+     * Undo), deadlines only on a card the student confirms.
+     */
+    private fun applyChanges(changes: List<AiChange>, expected: Boolean) {
+        val checked = AiChangeGuard.check(changes, lastKnown, lastStudentMessage, LocalDateTime.now())
+        val today = LocalDate.now()
+        if (checked.starts.isNotEmpty()) {
+            checked.starts.forEach { repo.setStart(it.task.id, it.new) }
+            val text = checked.starts.joinToString(" ") { e ->
+                val new = e.new
+                if (new == null) "Removed the start reminder for ${e.task.title}."
+                else "${e.task.title} now starts ${StartReminders.label(new, today)}. I'll remind you then."
+            }
+            messages += ChatMessage.Changed(text, checked.starts)
+        }
+        if (checked.deadlines.isNotEmpty()) messages += ChatMessage.ConfirmDeadline(checked.deadlines)
+        checked.startsRefused.firstOrNull()?.let { r ->
+            val day = r.at.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+            messages += ChatMessage.Bot(
+                if (r.afterDeadline) {
+                    val due = r.task.date?.let { relativeDay(it, today) + (r.task.time?.let { t -> ", ${t.format(timeFormat)}" } ?: "") }
+                    "${r.task.title} is due $due, so it can't start $day. I left the deadline as it is. If the due date changed, " +
+                        "say \"change the deadline to $day\" and I'll ask you to confirm."
+                } else {
+                    "${StartReminders.label(r.at, today)} has already passed. Try a later time for ${r.task.title}."
+                },
+            )
+        }
+        if (checked.deadlinesRefused > 0) {
+            messages += ChatMessage.Bot("I didn't change the deadline. If the due date really changed, say something like \"change the deadline to Friday\" and I'll ask you to confirm.")
+        }
+        val nothing = checked.starts.isEmpty() && checked.deadlines.isEmpty() && checked.deadlinesRefused == 0 && checked.startsRefused.isEmpty()
+        if (expected && nothing) {
+            messages += ChatMessage.Bot("I couldn't tell which task to change. Try its name, like \"start the essay tonight\".")
+        }
+    }
+
+    fun undoStarts(index: Int) {
+        val m = messages.getOrNull(index) as? ChatMessage.Changed ?: return
+        if (m.undone) return
+        m.edits.forEach { repo.setStart(it.task.id, it.old) }
+        messages[index] = m.copy(undone = true)
+    }
+
+    fun answerDeadline(index: Int, change: Boolean) {
+        val m = messages.getOrNull(index) as? ChatMessage.ConfirmDeadline ?: return
+        if (m.answer != null) return
+        if (change) {
+            m.edits.forEach { e ->
+                repo.update(e.task.id) { t ->
+                    val moved = t.copy(dueDate = e.newDate.toEpochDay(), dueTime = e.newTime?.toMinutes(), reminder = t.reminder ?: 0)
+                    // A start after the new deadline is no use.
+                    val deadline = e.newDate.atTime(e.newTime ?: java.time.LocalTime.MAX)
+                    if (moved.startAt()?.isBefore(deadline) == false) moved.withStart(null) else moved
+                }
+            }
+        }
+        messages[index] = m.copy(answer = change)
     }
 
     fun startFocus(plan: Planner.Plan): Boolean {
@@ -493,6 +585,14 @@ private fun PlanChat(session: PlanSession, snapshot: Snapshot, today: LocalDate,
                         onRemind = { session.remind(msg.plan) },
                         onRestart = session::start,
                     )
+                    is ChatMessage.Changed -> Column {
+                        BotBubble(if (msg.undone) "Put the start times back." else msg.text)
+                        if (!msg.undone) {
+                            Spacer(Modifier.height(8.dp))
+                            Pill("Undo", selected = false) { session.undoStarts(i) }
+                        }
+                    }
+                    is ChatMessage.ConfirmDeadline -> DeadlineCard(msg, today) { change -> session.answerDeadline(i, change) }
                 }
             }
         }
@@ -539,11 +639,25 @@ private fun AiSwitch(session: PlanSession) {
         }
     }
     if (consent) {
+        AiConsentDialog(
+            title = "Plan with Gemini AI?",
+            onDismiss = { consent = false },
+            onTurnOn = {
+                consent = false
+                session.switchAi(true)
+            },
+        )
+    }
+}
+
+/** The one-time "what gets sent" dialog before AI is used anywhere in the app. */
+@Composable
+fun AiConsentDialog(title: String, onDismiss: () -> Unit, onTurnOn: () -> Unit) {
         AlertDialog(
-            onDismissRequest = { consent = false },
+            onDismissRequest = onDismiss,
             containerColor = Palette.SurfaceHigh,
             shape = RoundedCornerShape(28.dp),
-            title = { Text("Plan with Gemini AI?", color = Palette.TextPrimary) },
+            title = { Text(title, color = Palette.TextPrimary) },
             text = {
                 Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
                     Text(
@@ -559,15 +673,9 @@ private fun AiSwitch(session: PlanSession) {
                     )
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    consent = false
-                    session.switchAi(true)
-                }) { Text("Turn on") }
-            },
-            dismissButton = { TextButton(onClick = { consent = false }) { Text("Not now") } },
+            confirmButton = { TextButton(onClick = onTurnOn) { Text("Turn on") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
         )
-    }
 }
 
 @Composable
@@ -592,6 +700,45 @@ private fun ThinkingBubble() {
             style = MaterialTheme.typography.bodyMedium,
             color = Palette.TextSecondary.copy(alpha = alpha),
         )
+    }
+}
+
+/** "Change the deadline?" with old and new, so the AI never moves a deadline on its own. */
+@Composable
+private fun DeadlineCard(msg: ChatMessage.ConfirmDeadline, today: LocalDate, onAnswer: (Boolean) -> Unit) {
+    fun due(date: LocalDate?, time: java.time.LocalTime?) =
+        date?.let { relativeDay(it, today) + (time?.let { t -> ", ${t.format(timeFormat)}" } ?: "") } ?: "no date"
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Palette.Surface)
+            .border(1.dp, Palette.PriorityMedium.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .padding(16.dp),
+    ) {
+        Text(
+            if (msg.edits.size == 1) "Change this deadline?" else "Change these deadlines?",
+            style = MaterialTheme.typography.titleSmall,
+            color = Palette.TextPrimary,
+        )
+        msg.edits.forEach { e ->
+            Spacer(Modifier.height(8.dp))
+            Text(e.task.title, style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
+            Text(
+                "${due(e.oldDate, e.oldTime)}  to  ${due(e.newDate, e.newTime)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextSecondary,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        when (msg.answer) {
+            null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Change deadline", selected = true) { onAnswer(true) }
+                Pill("Keep it", selected = false) { onAnswer(false) }
+            }
+            true -> Text("Deadline changed.", style = MaterialTheme.typography.labelLarge, color = Palette.Lavender)
+            false -> Text("Kept the deadline.", style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary)
+        }
     }
 }
 

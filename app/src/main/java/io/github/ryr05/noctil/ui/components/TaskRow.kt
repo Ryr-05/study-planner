@@ -59,6 +59,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.foundation.layout.heightIn
 import io.github.ryr05.noctil.data.model.Priority
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.ui.theme.Palette
@@ -103,6 +105,10 @@ fun TaskRow(
     /** Non-null while picking several tasks. Tap toggles; long-press starts picking. */
     selection: Set<Long>? = null,
     onSelect: ((TaskItem) -> Unit)? = null,
+    /** Shows a Start button that begins focus on this task (the "Start today" list). */
+    onStart: ((TaskItem) -> Unit)? = null,
+    /** What a left swipe says it does. */
+    swipeLeftLabel: String = "Tomorrow",
 ) {
     val haptics = LocalHapticFeedback.current
     val shape = groupShape(index, count)
@@ -136,7 +142,7 @@ fun TaskRow(
         backgroundContent = {
             val direction = state.dismissDirection
             val (color, icon, label, alignEnd) = when (direction) {
-                SwipeToDismissBoxValue.EndToStart -> SwipeLook(Palette.PriorityMedium, Icons.Rounded.WbTwilight, "Tomorrow", true)
+                SwipeToDismissBoxValue.EndToStart -> SwipeLook(Palette.PriorityMedium, Icons.Rounded.WbTwilight, swipeLeftLabel, true)
                 else -> SwipeLook(Palette.Lavender, Icons.Rounded.Check, "Done", false)
             }
             Box(
@@ -154,7 +160,7 @@ fun TaskRow(
             }
         },
     ) {
-        RowContent(task, index, today, showDate, showList, onToggle, onOpen, onMoveToTomorrow, selection, onSelect)
+        RowContent(task, index, today, showDate, showList, onToggle, onOpen, onMoveToTomorrow, selection, onSelect, onStart, swipeLeftLabel)
     }
 }
 
@@ -173,6 +179,8 @@ private fun RowContent(
     onMoveToTomorrow: ((TaskItem) -> Unit)?,
     selection: Set<Long>?,
     onSelect: ((TaskItem) -> Unit)?,
+    onStart: ((TaskItem) -> Unit)?,
+    swipeLeftLabel: String,
 ) {
     val selecting = selection != null
     val selected = selection?.contains(task.id) == true
@@ -201,7 +209,7 @@ private fun RowContent(
             .semantics {
                 if (onMoveToTomorrow != null && !task.done) {
                     customActions = listOf(
-                        CustomAccessibilityAction("Move to tomorrow") { onMoveToTomorrow(task); true },
+                        CustomAccessibilityAction(if (swipeLeftLabel == "Tomorrow") "Move to tomorrow" else swipeLeftLabel) { onMoveToTomorrow(task); true },
                     )
                 }
             }
@@ -246,8 +254,11 @@ private fun RowContent(
                 if (showDate && task.date != null) add(relativeDay(task.date, today))
                 task.time?.let { add(it.format(timeFormat)) }
             }.joinToString(", ")
+            // An upcoming start shows on the row, so you see it without opening the task.
+            val startText = task.startAt?.takeIf { !task.done && (it.toLocalDate().isAfter(today) || (it.toLocalDate() == today && onStart == null)) }
+                ?.let { "Start " + io.github.ryr05.noctil.reminders.StartReminders.label(it, today) }
             val hasMeta = whenText.isNotEmpty() || task.recurrence != null || (showList && task.list != null) ||
-                task.tags.isNotEmpty() || task.subtaskTotal > 0 || task.checklistTotal > 0
+                task.tags.isNotEmpty() || task.subtaskTotal > 0 || task.checklistTotal > 0 || startText != null
             if (hasMeta) {
                 FlowRow(
                     modifier = Modifier.padding(top = 4.dp),
@@ -257,6 +268,7 @@ private fun RowContent(
                     if (whenText.isNotEmpty()) {
                         Meta(Icons.Rounded.Schedule, whenText, if (overdue) Palette.PriorityHigh else Palette.TextSecondary)
                     }
+                    if (startText != null) Meta(Icons.Rounded.PlayCircle, startText, Palette.Lavender)
                     if (task.recurrence != null) Meta(Icons.Rounded.EventRepeat, null, Palette.TextSecondary)
                     if (task.subtaskTotal > 0) {
                         Meta(Icons.Rounded.AccountTree, "${task.subtaskDone}/${task.subtaskTotal}", Palette.TextSecondary)
@@ -267,6 +279,22 @@ private fun RowContent(
                     if (showList) task.list?.let { ColorTag(it.name, it.color) }
                     task.tags.forEach { ColorTag("#${it.name}", it.color) }
                 }
+            }
+        }
+        if (onStart != null && !task.done && !selecting) {
+            Row(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .heightIn(min = 36.dp)
+                    .clip(CircleShape)
+                    .background(Palette.Lavender.copy(alpha = 0.18f))
+                    .clickable(onClickLabel = "Start focus on ${task.title}", role = Role.Button) { onStart(task) }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Start", style = MaterialTheme.typography.labelLarge, color = Palette.Lavender)
             }
         }
         if (!task.done && (task.priority == Priority.High || task.priority == Priority.Medium)) {

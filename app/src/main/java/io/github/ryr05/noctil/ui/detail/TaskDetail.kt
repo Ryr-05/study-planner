@@ -104,7 +104,8 @@ import io.github.ryr05.noctil.data.model.Snapshot
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.toMinutes
 import io.github.ryr05.noctil.reminders.StartReminders
-import io.github.ryr05.noctil.ui.quickadd.StartChoiceText
+import io.github.ryr05.noctil.ui.components.StartChoiceText
+import io.github.ryr05.noctil.ui.components.StartPickerDialog
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.ui.components.CheckCircle
 import io.github.ryr05.noctil.ui.components.ColorTag
@@ -615,8 +616,7 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
 @Composable
 private fun StartRow(task: TaskItem, repo: Repository, today: LocalDate, onReminderSet: () -> Unit) {
     var open by remember { mutableStateOf(false) }
-    var pickDay by remember { mutableStateOf(false) }
-    var pickedDay by remember { mutableStateOf<LocalDate?>(null) }
+    var pick by remember { mutableStateOf(false) }
     val now = LocalDateTime.now()
     val at = task.startAt
     fun set(value: LocalDateTime?) {
@@ -656,7 +656,7 @@ private fun StartRow(task: TaskItem, repo: Repository, today: LocalDate, onRemin
                 text = { Text("Pick a day and time", color = Palette.TextPrimary) },
                 onClick = {
                     open = false
-                    pickDay = true
+                    pick = true
                 },
             )
             if (at != null) {
@@ -670,23 +670,16 @@ private fun StartRow(task: TaskItem, repo: Repository, today: LocalDate, onRemin
             }
         }
     }
-    if (pickDay) {
-        DateDialog(
-            initial = at?.toLocalDate() ?: task.date?.minusDays(1)?.takeIf { !it.isBefore(today) } ?: today,
-            onDismiss = { pickDay = false },
-            onPick = { day ->
-                pickDay = false
-                pickedDay = day
-            },
-        )
-    }
-    pickedDay?.let { day ->
-        TimeDialog(
-            initial = at?.toLocalTime() ?: StartReminders.EVENING,
-            onDismiss = { pickedDay = null },
-            onPick = { time ->
-                pickedDay = null
-                set(day.atTime(time))
+    if (pick) {
+        StartPickerDialog(
+            initial = at?.takeIf { it.isAfter(now) },
+            dueDate = task.date,
+            dueTime = task.time,
+            today = today,
+            onDismiss = { pick = false },
+            onPick = {
+                pick = false
+                set(it)
             },
         )
     }

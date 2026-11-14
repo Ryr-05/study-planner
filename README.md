@@ -58,7 +58,9 @@ show tappable examples to get you started.
 | Timetable | Enter each class once (days, time, room, color) and it shows every week |
 | Phone calendars | See your Google, Samsung or Outlook events. Optionally copy dated tasks into one of them, two-way |
 | Plan my session | In Focus: pick what's due (or type it), answer a quick question or two, and get a timed order that fits your free time and today's classes, with breaks. Start focus on the first task or get nudged as each one starts. Works offline |
-| AI planning (optional) | Turn on Gemini AI in Plan my session to just talk: "lab report due tomorrow 9am, problem set tonight, I have 2 hours". It only helps plan and remind, and only the tasks you pick are sent. Up to 40 AI messages a day |
+| AI planning (optional) | Turn on Gemini AI in Plan my session to just talk: "lab report due tomorrow 9am, problem set tonight, I have 2 hours". It can add tasks and move start times ("start the essay tonight", with Undo). It changes a deadline only when you ask, and only after you confirm on a card. It sees the tasks you pick and the titles and dates of your next two weeks, never notes. Up to 40 AI messages a day |
+| Add several at once | From quick add: type one task per line, or paste a message or syllabus. Split it on the phone, or let AI sort it out, then check every task before it's added |
+| Quick add suggestions | Faint one-tap chips for what you didn't type: before your next class for that subject, a matching #tag or list, and when to start (bigger tasks get an earlier start, and it learns the start times you pick) |
 | Focus | Pomodoro and stopwatch, linked to a task. Countdown on the lockscreen (and a Live Update chip on Android 16). Soft rain, white or brown noise |
 | Habits | Daily or chosen days, goals like 8 glasses of water, streaks, 20-week heatmap, reminders, home screen widget |
 | Statistics | Tasks finished, focus time and habit consistency by week, month or year |

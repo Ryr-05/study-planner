@@ -84,7 +84,21 @@ import io.github.ryr05.noctil.parse.ParsedInput
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.parse.Token
 import io.github.ryr05.noctil.parse.TokenKind
+import io.github.ryr05.noctil.parse.QuickSuggest
+import io.github.ryr05.noctil.reminders.StartHabits
 import io.github.ryr05.noctil.reminders.StartReminders
+import io.github.ryr05.noctil.ui.components.StartChoiceText
+import io.github.ryr05.noctil.ui.components.StartPickerDialog
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.ui.platform.LocalContext
+import java.time.Instant
+import java.time.ZoneOffset
 import io.github.ryr05.noctil.ui.components.color
 import io.github.ryr05.noctil.ui.components.relativeDay
 import io.github.ryr05.noctil.ui.components.timeFormat
@@ -107,6 +121,8 @@ fun QuickAddOverlay(
     onDismiss: () -> Unit,
     onSubmit: (ParsedInput, Long?) -> Unit,
     initialText: String = "",
+    /** Opens "Add several" with what's typed so far. */
+    onAddSeveral: (String) -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(visible = visible, enter = fadeIn(tween(160)), exit = fadeOut(tween(140))) {
@@ -127,7 +143,7 @@ fun QuickAddOverlay(
                 .navigationBarsPadding()
                 .padding(12.dp),
         ) {
-            QuickAddPanel(defaultDate, defaultListId, snapshot, today, onSubmit, initialText)
+            QuickAddPanel(defaultDate, defaultListId, snapshot, today, onSubmit, initialText, onAddSeveral)
         }
     }
 }
@@ -141,7 +157,9 @@ private fun QuickAddPanel(
     today: LocalDate,
     onSubmit: (ParsedInput, Long?) -> Unit,
     initialText: String,
+    onAddSeveral: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     var field by rememberSaveable(initialText, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))
     }
@@ -152,16 +170,50 @@ private fun QuickAddPanel(
         SmartParser.parse(text, LocalDateTime.now(), disabled, defaultDate)
     }
     // The start reminder: typed ("start thu 7pm"), picked from the chip, or suggested for a deadline.
+    // How early it suggests depends on the task's size and on what you usually pick.
     var start by remember { mutableStateOf<StartPick>(StartPick.Auto) }
+    val size = StartReminders.sizeOf(parsed.title, parsed.tags, parsed.priority, parsed.durationMinutes)
+    val lead = remember(size) { StartHabits.leadFor(context, size) }
+    val suggested = if (parsed.dateIsDefault) null
+    else StartReminders.suggest(parsed.date, parsed.time, parsed.recurrence != null, LocalDateTime.now(), lead)
     val startAt = when (val pick = start) {
         StartPick.Off -> null
         is StartPick.At -> pick.at
-        StartPick.Auto -> parsed.startAt ?: if (parsed.dateIsDefault) null
-        else StartReminders.suggest(parsed.date, parsed.time, parsed.recurrence != null, LocalDateTime.now())
+        StartPick.Auto -> parsed.startAt ?: suggested
     }
+    // A list picked from a suggestion (one whose name has spaces, so it can't be typed with ~).
+    var pickedList by remember { mutableStateOf<QuickSuggest.NamedThing?>(null) }
     val canAdd = text.isNotBlank()
-    val submit = { if (canAdd) onSubmit(parsed.copy(startAt = startAt), defaultListId) }
+    val submit = {
+        if (canAdd) {
+            // Learn from real choices only: a typed start, one you picked, or one you removed.
+            val due = parsed.date
+            if (due != null && !parsed.dateIsDefault && parsed.recurrence == null) {
+                val chosen = parsed.startAt != null || start != StartPick.Auto
+                if (chosen) StartHabits.record(context, size, startAt?.let { StartReminders.Lead.of(it, due) })
+            }
+            onSubmit(parsed.copy(startAt = startAt), pickedList?.id ?: defaultListId)
+        }
+    }
     val defaultList = defaultListId?.let { id -> snapshot.lists.firstOrNull { it.id == id } }
+    fun insert(words: String) {
+        val joined = text.trimEnd() + " " + words + " "
+        field = TextFieldValue(joined, TextRange(joined.length))
+    }
+    val suggestions = remember(parsed, pickedList, snapshot.classes, snapshot.lists, snapshot.tags) {
+        QuickSuggest.suggest(
+            parsed = parsed,
+            now = LocalDateTime.now(),
+            classes = snapshot.classes,
+            lists = snapshot.lists.map { QuickSuggest.NamedThing(it.id, it.name) },
+            tags = snapshot.tags.map { it.name },
+            hasListAlready = defaultListId != null || pickedList != null,
+        )
+    }
+    // "+ Start" when there's a deadline worth starting early for, but no start yet.
+    val offerStart = startAt == null && parsed.recurrence == null && parsed.date?.let { d ->
+        !parsed.dateIsDefault || d.isAfter(today)
+    } == true
 
     LaunchedEffect(Unit) { focus.requestFocus() }
 
@@ -221,21 +273,26 @@ private fun QuickAddPanel(
                 }
             }
 
-            val chips = chipsFor(parsed, today, hasStart = startAt != null)
-            if (chips.isNotEmpty() || startAt != null) {
+            val chips = chipsFor(parsed, today, hasStart = startAt != null) +
+                listOfNotNull(pickedList?.let { Chip(TokenKind.List, Icons.Rounded.FolderOpen, it.name, Palette.Lavender) })
+            if (chips.isNotEmpty() || startAt != null || offerStart || suggestions.isNotEmpty()) {
                 FlowRow(
                     modifier = Modifier.padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     chips.forEach { chip ->
-                        ParsedChip(chip) { disabled = disabled + chip.kind }
+                        ParsedChip(chip) {
+                            if (pickedList != null && chip.kind == TokenKind.List && parsed.listName == null) pickedList = null
+                            else disabled = disabled + chip.kind
+                        }
                     }
-                    if (startAt != null) {
+                    if (startAt != null || offerStart) {
                         StartChip(
                             at = startAt,
                             today = today,
-                            choices = StartReminders.choices(parsed.date, parsed.time, LocalDateTime.now()),
+                            dueDate = parsed.date,
+                            dueTime = parsed.time,
                             onPick = { start = StartPick.At(it) },
                             onRemove = {
                                 // Typed: keep the words as text. Suggested: just don't remind.
@@ -243,6 +300,15 @@ private fun QuickAddPanel(
                                 start = StartPick.Off
                             },
                         )
+                    }
+                    suggestions.forEach { s ->
+                        SuggestionChip(s, today) { apply ->
+                            when (apply) {
+                                is QuickSuggest.Apply.Insert -> insert(apply.text)
+                                is QuickSuggest.Apply.SetList -> pickedList = QuickSuggest.NamedThing(apply.id, apply.name)
+                                QuickSuggest.Apply.PickDue -> Unit
+                            }
+                        }
                     }
                 }
             }
@@ -267,6 +333,18 @@ private fun QuickAddPanel(
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.TextSecondary,
             )
+            Row(
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClickLabel = "Add several tasks") { onAddSeveral(text) }
+                    .padding(vertical = 6.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.PlaylistAdd, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add several at once, or paste a syllabus", style = MaterialTheme.typography.labelMedium, color = Palette.Lavender)
+            }
         }
     }
 }
@@ -335,49 +413,57 @@ private fun ParsedChip(chip: Chip, onRemove: () -> Unit) {
 
 /**
  * The start reminder chip. Tap to pick another time, x to drop it. Reads "Start Tonight 7 PM",
- * so it never looks like the deadline.
+ * so it never looks like the deadline. With no start yet it's a faint "+ Start".
  */
 @Composable
 private fun StartChip(
-    at: LocalDateTime,
+    at: LocalDateTime?,
     today: LocalDate,
-    choices: List<StartReminders.Choice>,
+    dueDate: LocalDate?,
+    dueTime: java.time.LocalTime?,
     onPick: (LocalDateTime) -> Unit,
     onRemove: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
-    val label = "Start " + StartReminders.label(at, today)
+    var picker by remember { mutableStateOf(false) }
+    val now = LocalDateTime.now()
+    val choices = StartReminders.choices(dueDate, dueTime, now)
     Box {
-        Row(
-            modifier = Modifier
-                .heightIn(min = 34.dp)
-                .clip(CircleShape)
-                .background(Palette.Lavender.copy(alpha = 0.16f))
-                .padding(end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (at == null) {
+            GhostChip(Icons.Rounded.PlayCircle, "Start", "Add a start reminder") { open = true }
+        } else {
+            val label = "Start " + StartReminders.label(at, today)
             Row(
                 modifier = Modifier
                     .heightIn(min = 34.dp)
                     .clip(CircleShape)
-                    .clickable(onClickLabel = "Change start time", role = Role.Button, enabled = choices.isNotEmpty()) { open = true }
-                    .padding(start = 10.dp, end = 2.dp)
-                    .semantics { contentDescription = "$label. Reminds you to start, apart from the deadline" },
+                    .background(Palette.Lavender.copy(alpha = 0.16f))
+                    .padding(end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(label, style = MaterialTheme.typography.labelLarge, color = Palette.TextPrimary, maxLines = 1)
-            }
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .clickable(onClickLabel = "No start reminder", role = Role.Button, onClick = onRemove)
-                    .semantics { contentDescription = "No start reminder" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.Close, contentDescription = null, tint = Palette.TextSecondary, modifier = Modifier.size(14.dp))
+                Row(
+                    modifier = Modifier
+                        .heightIn(min = 34.dp)
+                        .clip(CircleShape)
+                        .clickable(onClickLabel = "Change start time", role = Role.Button) { open = true }
+                        .padding(start = 10.dp, end = 2.dp)
+                        .semantics { contentDescription = "$label. Reminds you to start, apart from the deadline" },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = Palette.TextPrimary, maxLines = 1)
+                }
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .clickable(onClickLabel = "No start reminder", role = Role.Button, onClick = onRemove)
+                        .semantics { contentDescription = "No start reminder" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Close, contentDescription = null, tint = Palette.TextSecondary, modifier = Modifier.size(14.dp))
+                }
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
@@ -397,26 +483,121 @@ private fun StartChip(
                 )
             }
             DropdownMenuItem(
-                text = { Text("No start reminder", color = Palette.TextPrimary) },
+                text = { Text("Pick a day and time", color = Palette.TextPrimary) },
                 onClick = {
                     open = false
-                    onRemove()
+                    picker = true
+                },
+            )
+            if (at != null) {
+                DropdownMenuItem(
+                    text = { Text("No start reminder", color = Palette.TextPrimary) },
+                    onClick = {
+                        open = false
+                        onRemove()
+                    },
+                )
+            }
+        }
+    }
+    if (picker) {
+        StartPickerDialog(
+            initial = at,
+            dueDate = dueDate,
+            dueTime = dueTime,
+            today = today,
+            onDismiss = { picker = false },
+            onPick = {
+                picker = false
+                onPick(it)
+            },
+        )
+    }
+}
+
+/** A faint "+ something" chip: a suggestion you can take with one tap, or ignore. */
+@Composable
+private fun GhostChip(icon: ImageVector, label: String, description: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 34.dp)
+            .clip(CircleShape)
+            .border(1.dp, Palette.Lavender.copy(alpha = 0.45f), CircleShape)
+            .clickable(onClickLabel = description, role = Role.Button, onClick = onClick)
+            .padding(start = 8.dp, end = 12.dp)
+            .semantics { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Add, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(2.dp))
+        Icon(icon, contentDescription = null, tint = Palette.Lavender.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary, maxLines = 1)
+    }
+}
+
+/** A suggestion for something you didn't type: a deadline, a tag or a list. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SuggestionChip(s: QuickSuggest.Suggestion, today: LocalDate, onApply: (QuickSuggest.Apply) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var calendar by remember { mutableStateOf(false) }
+    val icon = when (s.kind) {
+        TokenKind.Date -> Icons.Rounded.CalendarMonth
+        TokenKind.Tag -> Icons.Rounded.Sell
+        else -> Icons.Rounded.FolderOpen
+    }
+    Box {
+        GhostChip(icon, s.label, "Add ${s.label}") {
+            if (s.apply == QuickSuggest.Apply.PickDue) open = true else onApply(s.apply)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
+            Text(
+                "Due",
+                style = MaterialTheme.typography.labelMedium,
+                color = Palette.TextSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            QuickSuggest.dueChoices(today).forEach { (label, words) ->
+                DropdownMenuItem(
+                    text = { Text(label, color = Palette.TextPrimary) },
+                    onClick = {
+                        open = false
+                        onApply(QuickSuggest.Apply.Insert(words))
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Pick a date", color = Palette.TextPrimary) },
+                onClick = {
+                    open = false
+                    calendar = true
                 },
             )
         }
     }
-}
-
-@Composable
-internal fun StartChoiceText(choice: StartReminders.Choice, today: LocalDate) {
-    Column {
-        Text(StartReminders.label(choice.at, today), color = Palette.TextPrimary)
-        choice.hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextSecondary) }
+    if (calendar) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = today.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { calendar = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    calendar = false
+                    state.selectedDateMillis?.let {
+                        val date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        onApply(QuickSuggest.Apply.Insert(QuickSuggest.wordsFor(date, today)))
+                    }
+                }) { Text("Set date") }
+            },
+            dismissButton = { TextButton(onClick = { calendar = false }) { Text("Cancel", color = Palette.TextPrimary) } },
+        ) { DatePicker(state = state) }
     }
 }
 
 /** Colors the understood parts of the typed text lavender. */
-private class TokenHighlight(private val tokens: List<Token>) : VisualTransformation {
+internal class TokenHighlight(private val tokens: List<Token>) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val styled = buildAnnotatedString {
             append(text)
