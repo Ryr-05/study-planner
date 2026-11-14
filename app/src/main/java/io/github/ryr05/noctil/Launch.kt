@@ -16,6 +16,8 @@ object Launch {
     const val ACTION_HABITS = "io.github.ryr05.noctil.action.HABITS"
     const val EXTRA_OPEN_DATE = "io.github.ryr05.noctil.OPEN_DATE"
     const val EXTRA_START_FOCUS = "io.github.ryr05.noctil.START_FOCUS"
+    /** Opens Focus with this task picked (from a plan nudge). */
+    const val EXTRA_FOCUS_TASK = "io.github.ryr05.noctil.FOCUS_TASK"
 
     private fun base(context: Context, action: String) =
         Intent(context, MainActivity::class.java)

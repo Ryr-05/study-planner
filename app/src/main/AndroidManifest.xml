@@ -76,6 +76,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".plan.PlanReminderReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".reminders.RescheduleReceiver"
             android:exported="true">
             <intent-filter>

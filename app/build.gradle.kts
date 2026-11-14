@@ -152,6 +152,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.ai)
     implementation(libs.credentials)
     implementation(libs.credentials.play)
     implementation(libs.googleid)

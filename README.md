@@ -4,7 +4,7 @@
 
 # Noctil
 
-A free task planner and calendar for students. Works offline. Made for Android.
+A free task planner and calendar for college students (18+). Works offline. Made for Android.
 
 <a href="https://github.com/Ryr-05/study-planner/releases/latest/download/Noctil.apk">
   <img src="https://img.shields.io/badge/Download-APK-B9A3FF?style=for-the-badge&logo=android&logoColor=1B1033&labelColor=1A1427" alt="Download APK" height="56">
@@ -15,6 +15,8 @@ A free task planner and calendar for students. Works offline. Made for Android.
 </div>
 
 ---
+
+> Noctil is for college students who are 18 or older. See [Terms and privacy](TERMS.md).
 
 ## Install on your phone
 
@@ -54,6 +56,8 @@ show tappable examples to get you started.
 | Time blocking | Tap an empty time to plan a task there. Long-press a task and drag it to a new time or day |
 | Timetable | Enter each class once (days, time, room, color) and it shows every week |
 | Phone calendars | See your Google, Samsung or Outlook events. Optionally copy dated tasks into one of them, two-way |
+| Plan my session | In Focus: pick what's due (or type it), answer a quick question or two, and get a timed order that fits your free time and today's classes, with breaks. Start focus on the first task or get nudged as each one starts. Works offline |
+| AI planning (optional) | Turn on Gemini AI in Plan my session to just talk: "lab report due tomorrow 9am, problem set tonight, I have 2 hours". It only helps plan and remind, and only the tasks you pick are sent. Up to 40 AI messages a day |
 | Focus | Pomodoro and stopwatch, linked to a task. Countdown on the lockscreen (and a Live Update chip on Android 16). Soft rain, white or brown noise |
 | Habits | Daily or chosen days, goals like 8 glasses of water, streaks, 20-week heatmap, reminders, home screen widget |
 | Statistics | Tasks finished, focus time and habit consistency by week, month or year |

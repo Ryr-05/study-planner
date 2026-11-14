@@ -107,3 +107,11 @@ val ItemColors = listOf(
     Color(0xFF9EE6F0), // cyan
     Color(0xFFD7E38A), // lime
 )
+
+private val examWords = Regex("\\b(exams?|midterms?|finals?|quiz(zes)?|tests?)\\b", RegexOption.IGNORE_CASE)
+private val examTags = setOf("exam", "exams", "test", "quiz", "midterm", "final")
+
+/** Tagged #exam (or #test, #quiz...) or named like one ("Chem midterm"). */
+fun TaskItem.looksLikeExam(): Boolean =
+    tags.any { it.name.lowercase() in examTags } || examWords.containsMatchIn(title)
+

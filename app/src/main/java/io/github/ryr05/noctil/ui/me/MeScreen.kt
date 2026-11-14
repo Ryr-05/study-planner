@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Notifications
@@ -88,6 +89,7 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
     val context = LocalContext.current
     val version = remember(context) { appVersion(context) }
     var showTips by remember { mutableStateOf(false) }
+    var showTerms by remember { mutableStateOf(false) }
     // Re-checked while this screen is open, so it updates after you change it in settings.
     val notificationsOn by produceState(Notifications.canNotify(context)) {
         while (true) {
@@ -178,7 +180,7 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
 
         item(key = "about-label") { SectionLabel("About") }
         item(key = "version") {
-            SettingRow(Icons.Rounded.Info, "Version", version, trailing = null, index = 0, count = 2)
+            SettingRow(Icons.Rounded.Info, "Version", version, trailing = null, index = 0, count = 3)
         }
         item(key = "update") {
             SettingRow(
@@ -187,11 +189,24 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
                 detail = "Opens the download page on GitHub",
                 trailing = null,
                 index = 1,
-                count = 2,
+                count = 3,
                 onClick = { openUrl(context, RELEASES_URL) },
             )
         }
+        item(key = "terms") {
+            SettingRow(
+                icon = Icons.Rounded.Gavel,
+                title = "Terms and privacy",
+                detail = "For college students 18+. What's saved and what AI planning sends",
+                trailing = null,
+                index = 2,
+                count = 3,
+                onClick = { showTerms = true },
+            )
+        }
     }
+
+    if (showTerms) io.github.ryr05.noctil.ui.onboarding.TermsDialog(onDismiss = { showTerms = false })
 
     backup.dialogs()
 

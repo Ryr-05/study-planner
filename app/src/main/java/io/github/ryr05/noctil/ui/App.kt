@@ -105,7 +105,7 @@ sealed interface LaunchRequest {
     data object QuickAdd : LaunchRequest
     data object Today : LaunchRequest
     data object Habits : LaunchRequest
-    data class Focus(val startNext: Boolean = false) : LaunchRequest
+    data class Focus(val startNext: Boolean = false, val taskId: Long? = null) : LaunchRequest
 }
 
 private data class UndoMessage(val id: Long, val text: String, val undo: () -> Unit)
@@ -178,6 +178,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var habitOpenId by rememberSaveable { mutableStateOf<Long?>(null) }
     var habitEditing by remember { mutableStateOf<HabitEdit?>(null) }
     var statsOpen by rememberSaveable { mutableStateOf(false) }
+    var planOpen by rememberSaveable { mutableStateOf(false) }
     var layout by rememberSaveable { mutableStateOf(TaskLayout.List) }
     var selection by remember { mutableStateOf<Set<Long>?>(null) }
     var stageEditing by remember { mutableStateOf<StageEdit?>(null) }
@@ -246,6 +247,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             is LaunchRequest.Focus -> {
                 detailStack = emptyList()
                 tab = Tab.Focus
+                request.taskId?.let { FocusEngine.setTask(context, it) }
                 if (request.startNext) FocusEngine.start(context)
             }
         }
@@ -347,7 +349,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
 
     BackHandler(
         enabled = detailStack.isNotEmpty() || quickAddOpen || searchOpen || drawerOpen || slot != null ||
-            timetableOpen || syncOpen || habitOpenId != null || statsOpen || selection != null ||
+            timetableOpen || syncOpen || habitOpenId != null || statsOpen || planOpen || selection != null ||
             tab != Tab.Tasks || view != TaskView.Today,
     ) {
         when {
@@ -357,6 +359,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             slot != null -> slot = null
             habitOpenId != null -> habitOpenId = null
             statsOpen -> statsOpen = false
+            planOpen -> planOpen = false
             timetableOpen -> timetableOpen = false
             syncOpen -> syncOpen = false
             searchOpen -> searchOpen = false
@@ -426,7 +429,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                                 },
                             ),
                         )
-                        Tab.Focus -> FocusScreen(snapshot, today, onOpenMe = openMe)
+                        Tab.Focus -> FocusScreen(snapshot, today, onOpenMe = openMe, onOpenPlanner = { planOpen = true })
                         Tab.Me -> MeScreen(
                             askedForNotificationsBefore = repo.askedForNotifications,
                             onAskNotifications = { askForNotificationsOnce() },
@@ -543,6 +546,17 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             )
 
             StatsSheet(visible = statsOpen, snapshot = snapshot, today = today, onDismiss = { statsOpen = false })
+
+            io.github.ryr05.noctil.ui.plan.PlanSheet(
+                visible = planOpen,
+                snapshot = snapshot,
+                today = today,
+                onDismiss = { planOpen = false },
+                onFocusStarted = {
+                    planOpen = false
+                    tab = Tab.Focus
+                },
+            )
 
             val quickAddDefaultDate = when {
                 tab == Tab.Calendar -> calendarDay

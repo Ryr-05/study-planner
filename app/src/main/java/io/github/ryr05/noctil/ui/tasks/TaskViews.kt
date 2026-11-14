@@ -1,5 +1,7 @@
 package io.github.ryr05.noctil.ui.tasks
 
+import io.github.ryr05.noctil.data.model.looksLikeExam
+
 import io.github.ryr05.noctil.data.model.Priority
 import io.github.ryr05.noctil.data.model.Snapshot
 import io.github.ryr05.noctil.data.model.TaskItem
@@ -155,13 +157,10 @@ fun sectionsFor(view: TaskView, snap: Snapshot, today: LocalDate): List<Section>
 }
 
 /** Finds the next exam: a task tagged #exam (or #test, #quiz) or with exam-like words in its title. */
-private val examWords = Regex("\\b(exams?|midterms?|finals?|quiz(zes)?|tests?)\\b", RegexOption.IGNORE_CASE)
-private val examTags = setOf("exam", "exams", "test", "quiz", "midterm", "final")
-
 fun nextExam(snap: Snapshot, today: LocalDate): TaskItem? =
     snap.tasks
         .filter { !it.done && it.date != null && !it.date.isBefore(today) && !it.date.isAfter(today.plusDays(60)) }
-        .filter { t -> t.tags.any { it.name.lowercase() in examTags } || examWords.containsMatchIn(t.title) }
+        .filter { it.looksLikeExam() }
         .minWithOrNull(compareBy<TaskItem>({ it.date }, { it.time ?: LocalTime.MAX }))
 
 fun searchTasks(snap: Snapshot, query: String): List<TaskItem> {
