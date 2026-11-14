@@ -45,6 +45,7 @@ show tappable examples to get you started.
 | Lists | Lists for each class, folders to group them, plus Today, Next 7 days, High priority, All, Completed and Inbox |
 | Repeat | Daily, weekdays, weekly on chosen days, every few days, monthly, yearly |
 | Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Optional "keep reminding until done". Survives restarts |
+| Start reminders | A second nudge for *when to start*, apart from the deadline. Add a task with a due date and quick add suggests 7 PM the day before (tap to change, x to remove), or type "essay due fri start thu 7pm". The nudge says "Time to start" with **Start focus**, **Tomorrow** and **Done**, and the task shows under **Start today** |
 | Alarms | Any task can ring like the Clock app: full screen over the lockscreen, sound until you stop it, Done or Snooze. Pick a phone alarm tone or add your own MP3. Settings in Me |
 | Big text | Works with the phone's largest text size: text grows, layouts stay usable |
 | Places | Save a spot like your campus, then get reminded when you arrive. No map account needed |

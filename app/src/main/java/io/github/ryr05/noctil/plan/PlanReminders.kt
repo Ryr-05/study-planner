@@ -13,6 +13,7 @@ import androidx.core.net.toUri
 import io.github.ryr05.noctil.Launch
 import io.github.ryr05.noctil.R
 import io.github.ryr05.noctil.reminders.Notifications
+import io.github.ryr05.noctil.reminders.Notifications.ownGroup
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -82,6 +83,7 @@ object PlanReminders {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            .ownGroup("plan_$taskId")
             .setContentIntent(open)
             .build()
         NotificationManagerCompat.from(context).notify((NOTIFICATION_BASE + taskId).toInt(), notification)

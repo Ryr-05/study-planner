@@ -12,7 +12,7 @@ import java.time.Month
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-enum class TokenKind { Date, Time, Priority, Tag, List, Repeat, Duration, Alarm }
+enum class TokenKind { Date, Time, Priority, Tag, List, Repeat, Duration, Alarm, Start }
 
 /** A piece of the typed text that was understood. [start] inclusive, [end] exclusive. */
 data class Token(val kind: TokenKind, val start: Int, val end: Int)
@@ -34,6 +34,8 @@ data class ParsedInput(
     val startDate: LocalDate? = null,
     /** "!alarm" or "with alarm": ring like an alarm clock. */
     val alarm: Boolean = false,
+    /** From "start thu 7pm": when to begin, with its own reminder apart from the deadline. */
+    val startAt: LocalDateTime? = null,
 )
 
 /**
@@ -51,6 +53,7 @@ data class ParsedInput(
  * Repeat: daily, weekly, biweekly, monthly, yearly, every day/weekday/weekend/other week,
  * every 3 days, every monday, every mon and wed, mondays, each friday, every month on the 15th,
  * every morning. Tags: #exam. List: ~Chemistry. Alarm: !alarm or "with alarm".
+ * Start: "start thu 7pm", "begin tomorrow", "and start tonight" (when to begin, apart from the deadline).
  */
 object SmartParser {
     private const val WD =
@@ -134,6 +137,14 @@ object SmartParser {
 
     private val rAlarm = rx("(?:(?<![\\p{L}\\p{N}_!])!alarm|${B}with\\s+(?:an\\s+)?alarm)$E")
 
+    // ---- Start ----
+    private val rStartWord = rx(
+        "(?:(?:,\\s*|\\s+)(?:and|then)\\s+|,\\s*)?$B(?:start(?:ing)?|begin(?:ning)?)(?:\\s+(?:it|on\\s+it|working))?\\s+(?:on\\s+|from\\s+)?",
+    )
+    private val rGap = Regex("[\\s,]*")
+    private val DATE_TIME_ONLY = TokenKind.entries.toSet() - TokenKind.Date - TokenKind.Time
+    private val START_EVENING: LocalTime = LocalTime.of(19, 0)
+
     private val rDanglingEnd = rx("\\s+(?:on|at|by|due|until|till|from|before)$")
     private val rDanglingStart = rx("^(?:on|at|by|from)\\s+")
 
@@ -143,12 +154,23 @@ object SmartParser {
         disabled: Set<TokenKind> = emptySet(),
         defaultDate: LocalDate? = null,
         locale: Locale = Locale.getDefault(),
+    ): ParsedInput = parse(input, now, disabled, defaultDate, locale, findStart = true)
+
+    private fun parse(
+        input: String,
+        now: LocalDateTime,
+        disabled: Set<TokenKind>,
+        defaultDate: LocalDate?,
+        locale: Locale,
+        findStart: Boolean,
     ): ParsedInput {
         val claimed = BooleanArray(input.length)
+        // Text that is understood but kept in the title (a start phrase whose chip was removed).
+        val reserved = BooleanArray(input.length)
         val tokens = mutableListOf<Token>()
         val today = now.toLocalDate()
 
-        fun free(r: IntRange) = r.all { !claimed[it] }
+        fun free(r: IntRange) = r.all { !claimed[it] && !reserved[it] }
         fun claim(kind: TokenKind, r: IntRange) {
             for (i in r) claimed[i] = true
             tokens += Token(kind, r.first, r.last + 1)
@@ -166,6 +188,32 @@ object SmartParser {
         var priority = Priority.None
         val tags = linkedSetOf<String>()
         var listName: String? = null
+
+        // ---------- Start (first, so "start thu" isn't read as the deadline) ----------
+        var startAt: LocalDateTime? = null
+        if (findStart) {
+            for (m in rStartWord.findAll(input)) {
+                val after = m.range.last + 1
+                val rest = input.substring(after)
+                // The start is the date and time right after the word, nothing further along.
+                var end = 0
+                for (t in parse(rest, now, DATE_TIME_ONLY, null, locale, findStart = false).tokens) {
+                    if (!rGap.matches(rest.substring(end, t.start))) break
+                    end = t.end
+                }
+                if (end == 0) continue
+                val phrase = parse(rest.substring(0, end), now, DATE_TIME_ONLY, null, locale, findStart = false)
+                val day = phrase.date ?: continue
+                val range = m.range.first until after + end
+                if (TokenKind.Start in disabled) {
+                    for (i in range) reserved[i] = true
+                } else {
+                    startAt = day.atTime(phrase.time ?: START_EVENING)
+                    claim(TokenKind.Start, range)
+                }
+                break
+            }
+        }
 
         // ---------- Repeat (first, so "every monday" isn't read as one Monday) ----------
         if (TokenKind.Repeat !in disabled) {
@@ -467,6 +515,7 @@ object SmartParser {
             durationMinutes = duration,
             startDate = startDate,
             alarm = alarm,
+            startAt = startAt,
         )
     }
 

@@ -48,6 +48,7 @@ object Backup {
                         .putOpt("reminder", t.reminder).put("done", t.done).putOpt("completedAt", t.completedAt).put("sortOrder", t.sortOrder)
                         .put("createdAt", t.createdAt).put("updatedAt", t.updatedAt).putOpt("durationMinutes", t.durationMinutes)
                         .putOpt("stageId", t.stageId).putOpt("startDate", t.startDate).put("nag", t.nag).putOpt("placeId", t.placeId).put("alarm", t.alarm)
+                        .putOpt("doDay", t.doDay).putOpt("doTime", t.doTime)
                 }))
                 .put("checklist", JSONArray(b.checklist().map { JSONObject().put("id", it.id).put("taskId", it.taskId).put("text", it.text).put("done", it.done).put("sortOrder", it.sortOrder) }))
                 .put("tags", JSONArray(b.tags().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }))
@@ -100,6 +101,7 @@ object Backup {
                         durationMinutes = it.intOrNull("durationMinutes"),
                         stageId = it.longOrNull("stageId"), startDate = it.longOrNull("startDate"),
                         nag = it.optBoolean("nag"), placeId = it.longOrNull("placeId"), alarm = it.optBoolean("alarm"),
+                        doDay = it.longOrNull("doDay"), doTime = it.intOrNull("doTime"),
                     )
                 })
                 b.insertChecklist(arr("checklist").objects().map { ChecklistEntity(it.getLong("id"), it.getLong("taskId"), it.getString("text"), it.optBoolean("done"), it.optLong("sortOrder")) })

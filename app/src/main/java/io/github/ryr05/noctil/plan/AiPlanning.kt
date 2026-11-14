@@ -148,6 +148,7 @@ class GeminiPlanner {
                     .put("title", t.title)
                     .put("due_date", t.date?.toString() ?: JSONObject.NULL)
                     .put("due_time", t.time?.toString() ?: JSONObject.NULL)
+                    .put("planned_start", t.startAt?.toString() ?: JSONObject.NULL)
                     .put("priority", if (t.priority == Priority.None) "none" else t.priority.label.lowercase())
                     .put("length_minutes", answers.lengths[t.id] ?: t.durationMinutes ?: JSONObject.NULL),
             )

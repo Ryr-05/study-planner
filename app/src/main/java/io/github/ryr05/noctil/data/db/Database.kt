@@ -73,6 +73,10 @@ data class TaskEntity(
     val placeId: Long? = null,
     /** Ring like an alarm clock (full screen, sound until dismissed) instead of a quiet notification. */
     @ColumnInfo(defaultValue = "0") val alarm: Boolean = false,
+    /** When to start working on it ("do it now" nudge), apart from the deadline. Days since 1970-01-01. */
+    val doDay: Long? = null,
+    /** Minutes after midnight for [doDay]. */
+    val doTime: Int? = null,
 )
 
 /** A custom board column, like "Doing" or "Review". */
@@ -198,7 +202,7 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): TaskEntity?
 
-    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND reminder IS NOT NULL AND dueDate IS NOT NULL")
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND ((reminder IS NOT NULL AND dueDate IS NOT NULL) OR doDay IS NOT NULL)")
     suspend fun withReminders(): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND dueDate IS NOT NULL")
@@ -543,7 +547,7 @@ interface BoardDao {
         FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
         SyncMapEntity::class, StageEntity::class, PlaceEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -562,7 +566,7 @@ abstract class NoctilDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }
@@ -618,6 +622,14 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
                 "`remoteId` TEXT NOT NULL, `hash` INTEGER NOT NULL, PRIMARY KEY(`tableName`, `localKey`))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_map_tableName_remoteId` ON `sync_map` (`tableName`, `remoteId`)")
+    }
+}
+
+/** Version 6 to 7: a task can have a start reminder apart from its deadline. Existing data is kept. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `doDay` INTEGER")
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `doTime` INTEGER")
     }
 }
 

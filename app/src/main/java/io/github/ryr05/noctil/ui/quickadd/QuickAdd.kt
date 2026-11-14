@@ -42,7 +42,10 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Timelapse
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -81,6 +84,7 @@ import io.github.ryr05.noctil.parse.ParsedInput
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.parse.Token
 import io.github.ryr05.noctil.parse.TokenKind
+import io.github.ryr05.noctil.reminders.StartReminders
 import io.github.ryr05.noctil.ui.components.color
 import io.github.ryr05.noctil.ui.components.relativeDay
 import io.github.ryr05.noctil.ui.components.timeFormat
@@ -147,8 +151,16 @@ private fun QuickAddPanel(
     val parsed = remember(text, disabled, defaultDate) {
         SmartParser.parse(text, LocalDateTime.now(), disabled, defaultDate)
     }
+    // The start reminder: typed ("start thu 7pm"), picked from the chip, or suggested for a deadline.
+    var start by remember { mutableStateOf<StartPick>(StartPick.Auto) }
+    val startAt = when (val pick = start) {
+        StartPick.Off -> null
+        is StartPick.At -> pick.at
+        StartPick.Auto -> parsed.startAt ?: if (parsed.dateIsDefault) null
+        else StartReminders.suggest(parsed.date, parsed.time, parsed.recurrence != null, LocalDateTime.now())
+    }
     val canAdd = text.isNotBlank()
-    val submit = { if (canAdd) onSubmit(parsed, defaultListId) }
+    val submit = { if (canAdd) onSubmit(parsed.copy(startAt = startAt), defaultListId) }
     val defaultList = defaultListId?.let { id -> snapshot.lists.firstOrNull { it.id == id } }
 
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -209,8 +221,8 @@ private fun QuickAddPanel(
                 }
             }
 
-            val chips = chipsFor(parsed, today)
-            if (chips.isNotEmpty()) {
+            val chips = chipsFor(parsed, today, hasStart = startAt != null)
+            if (chips.isNotEmpty() || startAt != null) {
                 FlowRow(
                     modifier = Modifier.padding(top = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -219,9 +231,22 @@ private fun QuickAddPanel(
                     chips.forEach { chip ->
                         ParsedChip(chip) { disabled = disabled + chip.kind }
                     }
+                    if (startAt != null) {
+                        StartChip(
+                            at = startAt,
+                            today = today,
+                            choices = StartReminders.choices(parsed.date, parsed.time, LocalDateTime.now()),
+                            onPick = { start = StartPick.At(it) },
+                            onRemove = {
+                                // Typed: keep the words as text. Suggested: just don't remind.
+                                if (parsed.startAt != null && start == StartPick.Auto) disabled = disabled + TokenKind.Start
+                                start = StartPick.Off
+                            },
+                        )
+                    }
                 }
             }
-            if (disabled.isNotEmpty()) {
+            if (disabled.isNotEmpty() || start == StartPick.Off) {
                 Text(
                     text = "Show all suggestions again",
                     style = MaterialTheme.typography.labelMedium,
@@ -229,13 +254,16 @@ private fun QuickAddPanel(
                     modifier = Modifier
                         .padding(top = 10.dp)
                         .clip(CircleShape)
-                        .clickable(role = Role.Button) { disabled = emptySet() }
+                        .clickable(role = Role.Button) {
+                            disabled = emptySet()
+                            start = StartPick.Auto
+                        }
                         .padding(vertical = 6.dp),
                 )
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Type it naturally: friday next week 5pm, tmrw 3-5pm, every monday, in 2 hours, !1, #exam, ~Chemistry",
+                text = "Type it naturally: friday next week 5pm, tmrw 3-5pm, every monday, start thu 7pm, !1, #exam, ~Chemistry",
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.TextSecondary,
             )
@@ -245,9 +273,18 @@ private fun QuickAddPanel(
 
 private data class Chip(val kind: TokenKind, val icon: ImageVector, val label: String, val color: Color)
 
-private fun chipsFor(p: ParsedInput, today: LocalDate): List<Chip> = buildList {
+/** What the Start chip does: follow the text or the suggestion, a picked time, or no start reminder. */
+private sealed interface StartPick {
+    data object Auto : StartPick
+    data object Off : StartPick
+    data class At(val at: LocalDateTime) : StartPick
+}
+
+private fun chipsFor(p: ParsedInput, today: LocalDate, hasStart: Boolean): List<Chip> = buildList {
     if (p.date != null && !p.dateIsDefault) {
-        val label = p.startDate?.let { "${relativeDay(it, today)} to ${relativeDay(p.date, today)}" } ?: relativeDay(p.date, today)
+        val day = p.startDate?.let { "${relativeDay(it, today)} to ${relativeDay(p.date, today)}" } ?: relativeDay(p.date, today)
+        // With a start time next to it, say which one is the deadline.
+        val label = if (hasStart) "Due $day" else day
         add(Chip(TokenKind.Date, Icons.Rounded.CalendarMonth, label, Palette.Lavender))
     }
     val lengthTyped = p.tokens.any { it.kind == TokenKind.Duration }
@@ -293,6 +330,88 @@ private fun ParsedChip(chip: Chip, onRemove: () -> Unit) {
         ) {
             Icon(Icons.Rounded.Close, contentDescription = null, tint = Palette.TextSecondary, modifier = Modifier.size(14.dp))
         }
+    }
+}
+
+/**
+ * The start reminder chip. Tap to pick another time, x to drop it. Reads "Start Tonight 7 PM",
+ * so it never looks like the deadline.
+ */
+@Composable
+private fun StartChip(
+    at: LocalDateTime,
+    today: LocalDate,
+    choices: List<StartReminders.Choice>,
+    onPick: (LocalDateTime) -> Unit,
+    onRemove: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val label = "Start " + StartReminders.label(at, today)
+    Box {
+        Row(
+            modifier = Modifier
+                .heightIn(min = 34.dp)
+                .clip(CircleShape)
+                .background(Palette.Lavender.copy(alpha = 0.16f))
+                .padding(end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .heightIn(min = 34.dp)
+                    .clip(CircleShape)
+                    .clickable(onClickLabel = "Change start time", role = Role.Button, enabled = choices.isNotEmpty()) { open = true }
+                    .padding(start = 10.dp, end = 2.dp)
+                    .semantics { contentDescription = "$label. Reminds you to start, apart from the deadline" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(label, style = MaterialTheme.typography.labelLarge, color = Palette.TextPrimary, maxLines = 1)
+            }
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .clickable(onClickLabel = "No start reminder", role = Role.Button, onClick = onRemove)
+                    .semantics { contentDescription = "No start reminder" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Close, contentDescription = null, tint = Palette.TextSecondary, modifier = Modifier.size(14.dp))
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
+            Text(
+                "Remind me to start",
+                style = MaterialTheme.typography.labelMedium,
+                color = Palette.TextSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            choices.forEach { choice ->
+                DropdownMenuItem(
+                    text = { StartChoiceText(choice, today) },
+                    onClick = {
+                        open = false
+                        onPick(choice.at)
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("No start reminder", color = Palette.TextPrimary) },
+                onClick = {
+                    open = false
+                    onRemove()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun StartChoiceText(choice: StartReminders.Choice, today: LocalDate) {
+    Column {
+        Text(StartReminders.label(choice.at, today), color = Palette.TextPrimary)
+        choice.hint?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextSecondary) }
     }
 }
 

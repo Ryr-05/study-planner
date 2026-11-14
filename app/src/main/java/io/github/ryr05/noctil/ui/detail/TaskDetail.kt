@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.EventRepeat
@@ -102,6 +103,8 @@ import io.github.ryr05.noctil.data.model.Reminders
 import io.github.ryr05.noctil.data.model.Snapshot
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.toMinutes
+import io.github.ryr05.noctil.reminders.StartReminders
+import io.github.ryr05.noctil.ui.quickadd.StartChoiceText
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.ui.components.CheckCircle
 import io.github.ryr05.noctil.ui.components.ColorTag
@@ -278,10 +281,11 @@ private fun DetailContent(
                 if (task.time != null) DurationRow(task, repo)
                 RepeatRow(task, repo, today)
                 ReminderRow(task, repo, actions.onReminderSet)
+                StartRow(task, repo, today, actions.onReminderSet)
                 PropertyRow(
                     icon = Icons.Rounded.DateRange,
-                    label = "Starts",
-                    value = task.startDate?.let { relativeDay(it, today) } ?: "No start date",
+                    label = "From",
+                    value = task.startDate?.let { relativeDay(it, today) } ?: "Due day only",
                     active = task.startDate != null,
                     onClick = { showStart = true },
                     onClear = if (task.startDate != null) ({ repo.update(task.id) { it.copy(startDate = null) } }) else null,
@@ -601,6 +605,90 @@ private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> U
                 },
             )
         }
+    }
+}
+
+/**
+ * When to start: its own reminder ("Time to start"), apart from the deadline reminder, so a
+ * big task gets begun the day before instead of remembered an hour before it's due.
+ */
+@Composable
+private fun StartRow(task: TaskItem, repo: Repository, today: LocalDate, onReminderSet: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var pickDay by remember { mutableStateOf(false) }
+    var pickedDay by remember { mutableStateOf<LocalDate?>(null) }
+    val now = LocalDateTime.now()
+    val at = task.startAt
+    fun set(value: LocalDateTime?) {
+        repo.setStart(task.id, value)
+        if (value != null) onReminderSet()
+    }
+    Box {
+        PropertyRow(
+            icon = Icons.Rounded.PlayCircle,
+            label = "Start",
+            value = when {
+                at == null -> "No start reminder"
+                at.isBefore(now) && !task.done -> StartReminders.label(at, today) + ", passed"
+                else -> StartReminders.label(at, today)
+            },
+            active = at != null,
+            onClick = { open = true },
+            onClear = if (at != null) ({ set(null) }) else null,
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
+            Text(
+                "Remind me to start",
+                style = MaterialTheme.typography.labelMedium,
+                color = Palette.TextSecondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            StartReminders.choices(task.date, task.time, now).forEach { choice ->
+                DropdownMenuItem(
+                    text = { StartChoiceText(choice, today) },
+                    onClick = {
+                        open = false
+                        set(choice.at)
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Pick a day and time", color = Palette.TextPrimary) },
+                onClick = {
+                    open = false
+                    pickDay = true
+                },
+            )
+            if (at != null) {
+                DropdownMenuItem(
+                    text = { Text("No start reminder", color = Palette.TextPrimary) },
+                    onClick = {
+                        open = false
+                        set(null)
+                    },
+                )
+            }
+        }
+    }
+    if (pickDay) {
+        DateDialog(
+            initial = at?.toLocalDate() ?: task.date?.minusDays(1)?.takeIf { !it.isBefore(today) } ?: today,
+            onDismiss = { pickDay = false },
+            onPick = { day ->
+                pickDay = false
+                pickedDay = day
+            },
+        )
+    }
+    pickedDay?.let { day ->
+        TimeDialog(
+            initial = at?.toLocalTime() ?: StartReminders.EVENING,
+            onDismiss = { pickedDay = null },
+            onPick = { time ->
+                pickedDay = null
+                set(day.atTime(time))
+            },
+        )
     }
 }
 

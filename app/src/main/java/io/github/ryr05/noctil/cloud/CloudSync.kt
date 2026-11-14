@@ -247,6 +247,7 @@ object CloudSync {
                             "completedAt" to t.completedAt, "sortOrder" to t.sortOrder, "createdAt" to t.createdAt,
                             "durationMinutes" to t.durationMinutes, "stage" to remoteOf("stages", t.stageId),
                             "startDate" to t.startDate, "nag" to t.nag, "place" to remoteOf("places", t.placeId), "alarm" to t.alarm,
+                            "doDay" to t.doDay, "doTime" to t.doTime,
                         ),
                     )
                 }
@@ -471,6 +472,7 @@ object CloudSync {
                         completedAt = d.long("completedAt"), sortOrder = d.long("sortOrder") ?: 0, createdAt = d.long("createdAt") ?: updated,
                         updatedAt = updated, deleted = false, durationMinutes = d.int("durationMinutes"),
                         stageId = stage, startDate = d.long("startDate"), nag = d.bool("nag"), placeId = place, alarm = d.bool("alarm"),
+                        doDay = d.long("doDay"), doTime = d.int("doTime"),
                     )
                     return if (id != null && dao.task(id) != null) { dao.updateTask(e); key } else dao.insertTask(e.copy(id = 0)).toString()
                 }

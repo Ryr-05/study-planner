@@ -80,6 +80,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".reminders.StartReminderReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".reminders.RescheduleReceiver"
             android:exported="true">
             <intent-filter>

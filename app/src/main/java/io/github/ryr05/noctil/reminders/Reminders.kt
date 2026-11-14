@@ -42,6 +42,7 @@ class ReminderScheduler(private val context: Context) {
     fun schedule(task: TaskEntity) {
         cancel(task.id)
         if (task.done || task.deleted) return
+        StartReminders.schedule(context, task)
         val at = Reminders.triggerAt(task.localDate(), task.localTime(), task.reminder) ?: return
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         if (millis <= System.currentTimeMillis()) return
@@ -75,6 +76,7 @@ class ReminderScheduler(private val context: Context) {
             alarms.cancel(it)
             it.cancel()
         }
+        StartReminders.cancel(context, taskId)
     }
 
     private fun pendingIntent(taskId: Long, create: Boolean): PendingIntent? {
@@ -98,6 +100,13 @@ object Notifications {
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
+
+    /**
+     * Its own group, so Android 16 doesn't bundle it with the "tasks today" card. A bundled
+     * notification is posted silently: no sound, no pop-up, buttons hidden.
+     */
+    fun NotificationCompat.Builder.ownGroup(key: String): NotificationCompat.Builder =
+        setGroup("noctil_$key").setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_ALL)
 
     fun canNotify(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -133,6 +142,7 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(!task.nag)
             .setOngoing(task.nag)
+            .ownGroup("task_$id")
             .setContentIntent(open)
             .addAction(0, "Done", actionIntent(context, ACTION_DONE, id))
             .addAction(0, "Snooze 10 min", actionIntent(context, ACTION_SNOOZE, id))

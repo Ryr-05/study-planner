@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
@@ -56,6 +57,9 @@ data class Completion(val taskId: Long, val createdNextId: Long?, val recurrence
 fun TaskEntity.localDate(): LocalDate? = dueDate?.let(LocalDate::ofEpochDay)
 fun TaskEntity.localTime(): LocalTime? = dueTime?.let { LocalTime.of(it / 60, it % 60) }
 fun LocalTime.toMinutes(): Int = hour * 60 + minute
+fun TaskEntity.withStart(at: LocalDateTime?): TaskEntity =
+    copy(doDay = at?.toLocalDate()?.toEpochDay(), doTime = at?.toLocalTime()?.toMinutes())
+fun TaskEntity.startAt(): LocalDateTime? = doDay?.let { LocalDate.ofEpochDay(it).atTime(LocalTime.of((doTime ?: 19 * 60) / 60, (doTime ?: 19 * 60) % 60)) }
 
 /**
  * The single place the app reads and writes data. Screens observe [snapshot] and call the
@@ -124,6 +128,8 @@ class Repository(
                         durationMinutes = parsed.durationMinutes,
                         startDate = parsed.startDate?.toEpochDay(),
                         alarm = parsed.alarm,
+                        doDay = parsed.startAt?.toLocalDate()?.toEpochDay(),
+                        doTime = parsed.startAt?.toLocalTime()?.toMinutes(),
                         sortOrder = db.tasks().maxSortOrder() + 1,
                         createdAt = now,
                         updatedAt = now,
@@ -157,8 +163,14 @@ class Repository(
             t.dueDate == null && t.reminder == null -> 0
             else -> t.reminder
         }
-        t.copy(dueDate = date?.toEpochDay(), dueTime = if (date == null) null else t.dueTime, reminder = reminder)
+        val moved = t.copy(dueDate = date?.toEpochDay(), dueTime = if (date == null) null else t.dueTime, reminder = reminder)
+        // A start time after the new deadline is no use; drop it rather than nudge too late.
+        val deadline = date?.atTime(moved.localTime() ?: LocalTime.MAX)
+        if (deadline != null && moved.startAt()?.isBefore(deadline) == false) moved.withStart(null) else moved
     }
+
+    /** Sets or clears when the student plans to start the task. Its own reminder, apart from the deadline. */
+    fun setStart(id: Long, at: LocalDateTime?) = update(id) { it.withStart(at) }
 
     fun setDone(id: Long, done: Boolean, onResult: (Completion) -> Unit = {}) {
         scope.launch { setDoneNow(id, done)?.let(onResult) }
@@ -186,6 +198,8 @@ class Repository(
                 val newId = db.tasks().insert(
                     current.copy(
                         id = 0, done = false, completedAt = null, dueDate = nextDate.toEpochDay(),
+                        // Keep the same head start before the next deadline.
+                        doDay = current.doDay?.let { it + (nextDate.toEpochDay() - current.dueDate) },
                         sortOrder = db.tasks().maxSortOrder() + 1, createdAt = now, updatedAt = now,
                     ),
                 )
@@ -659,6 +673,7 @@ class Repository(
                 nag = t.nag,
                 placeId = t.placeId,
                 alarm = t.alarm,
+                startAt = t.startAt(),
             )
         }
         return Snapshot(

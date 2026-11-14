@@ -72,7 +72,8 @@ object Planner {
         tasks.filter { t ->
             !t.done && t.parentId == null && (
                 (t.date != null && !t.date.isAfter(today.plusDays(7))) ||
-                    (t.date == null && t.priority == Priority.High)
+                    (t.date == null && t.priority == Priority.High) ||
+                    t.startAt?.toLocalDate()?.isAfter(today) == false
                 )
         }
 
@@ -109,6 +110,11 @@ object Planner {
             Priority.Medium -> 12
             Priority.Low -> 4
             Priority.None -> 0
+        }
+        // The student set a start time for today (or earlier): honor their own plan.
+        if ((days == null || days > 0) && t.startAt?.toLocalDate()?.isAfter(today) == false) {
+            s += 15
+            reasons.add(0, "You planned to start today")
         }
         if (t.id in answers.favored) {
             s += 30

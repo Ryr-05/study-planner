@@ -396,4 +396,52 @@ class SmartParserTest {
     }
 
     @Test fun beforeIsDropped() = assertEquals("submit", p("submit before fri").title)
+
+    // ---------- Start ("when I'll begin", apart from the deadline) ----------
+
+    @Test fun startIsSeparateFromTheDeadline() {
+        val r = p("Essay due fri 11:59pm start thu 7pm")
+        assertEquals("Essay", r.title)
+        assertEquals(d(11, 13), r.date)
+        assertEquals(LocalTime.of(23, 59), r.time)
+        assertEquals(d(11, 12).atTime(19, 0), r.startAt)
+    }
+
+    @Test fun startWithoutATimeMeansTheEvening() {
+        val r = p("Lab report fri, start tomorrow")
+        assertEquals("Lab report", r.title)
+        assertEquals(d(11, 13), r.date)
+        assertEquals(d(11, 11).atTime(19, 0), r.startAt)
+    }
+
+    @Test fun andStartIsDropped() {
+        val r = p("Essay fri and start wed at 6pm")
+        assertEquals("Essay", r.title)
+        assertEquals(d(11, 13), r.date)
+        assertEquals(d(11, 11).atTime(18, 0), r.startAt)
+        assertNull(r.time)
+    }
+
+    @Test fun startOnlyCountsWithADateRightAfter() {
+        val r = p("Start essay fri")
+        assertEquals("Start essay", r.title)
+        assertEquals(d(11, 13), r.date)
+        assertNull(r.startAt)
+        assertEquals(d(12, 1), p("start of next month").date)
+        assertNull(p("start of next month").startAt)
+    }
+
+    @Test fun startTimeAloneNeedsNoDeadline() {
+        val r = p("Reading start at 9")
+        assertEquals("Reading", r.title)
+        assertNull(r.date)
+        assertEquals(d(11, 11).atTime(9, 0), r.startAt)
+    }
+
+    @Test fun removedStartChipKeepsTheWordsAsText() {
+        val r = p("Essay start thu due fri", disabled = setOf(TokenKind.Start))
+        assertNull(r.startAt)
+        assertEquals(d(11, 13), r.date)
+        assertEquals("Essay start thu", r.title)
+    }
 }

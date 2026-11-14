@@ -27,11 +27,12 @@ class PlannerTest {
         priority: Priority = Priority.None,
         minutes: Int? = null,
         tags: List<String> = emptyList(),
+        start: LocalDateTime? = null,
     ) = TaskItem(
         id = id, parentId = null, title = title, notes = "", date = date, time = time, priority = priority,
         list = null, tags = tags.mapIndexed { i, n -> Tag(i.toLong(), n, Color.White) }, recurrence = null, reminder = null,
         done = false, completedAt = null, sortOrder = id, createdAt = 0, subtaskTotal = 0, subtaskDone = 0,
-        checklistTotal = 0, checklistDone = 0, durationMinutes = minutes,
+        checklistTotal = 0, checklistDone = 0, durationMinutes = minutes, startAt = start,
     )
 
     @Test fun overdueAndDueTodayComeFirst() {
@@ -131,5 +132,21 @@ class PlannerTest {
             task(4, "Someday", null),
         )
         assertEquals(listOf(2L, 3L), Planner.candidates(tasks, today).map { it.id })
+    }
+
+    @Test fun plannedStartTodayGetsABoost() {
+        val plain = Planner.score(task(1, "Essay", today.plusDays(4)), Planner.Answers(), now)
+        val planned = Planner.score(task(2, "Essay", today.plusDays(4), start = today.atTime(19, 0)), Planner.Answers(), now)
+        assertEquals(plain.score + 15, planned.score)
+        assertEquals("You planned to start today", planned.reasons.first())
+        // A start tomorrow isn't today's business yet.
+        val later = Planner.score(task(3, "Essay", today.plusDays(4), start = today.plusDays(1).atTime(19, 0)), Planner.Answers(), now)
+        assertEquals(plain.score, later.score)
+    }
+
+    @Test fun plannedStartMakesAFarTaskACandidate() {
+        val far = task(1, "Term paper", today.plusDays(20), start = today.atTime(9, 0))
+        val notYet = task(2, "Other paper", today.plusDays(20), start = today.plusDays(3).atTime(9, 0))
+        assertEquals(listOf(1L), Planner.candidates(listOf(far, notYet), today).map { it.id })
     }
 }

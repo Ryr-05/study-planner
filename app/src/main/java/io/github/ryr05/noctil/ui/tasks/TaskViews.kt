@@ -58,6 +58,12 @@ val openTaskOrder: Comparator<TaskItem> = compareBy<TaskItem>(
     { it.sortOrder },
 )
 
+/** Planned to start by [today] and not due yet, so it isn't already in Today or Overdue. */
+fun TaskItem.startsBy(today: LocalDate): Boolean {
+    val start = startAt?.toLocalDate() ?: return false
+    return !done && !start.isAfter(today) && (date == null || date.isAfter(today))
+}
+
 fun TaskItem.completedOn(): LocalDate? =
     completedAt?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
 
@@ -76,7 +82,7 @@ fun viewTitle(view: TaskView, snap: Snapshot): String = when (view) {
 fun openCount(view: TaskView, snap: Snapshot, today: LocalDate): Int {
     val open = snap.tasks.filter { it.parentId == null && !it.done }
     return when (view) {
-        TaskView.Today -> open.count { it.date != null && !it.date.isAfter(today) }
+        TaskView.Today -> open.count { (it.date != null && !it.date.isAfter(today)) || it.startsBy(today) }
         TaskView.Next7 -> open.count { it.date != null && !it.date.isAfter(today.plusDays(6)) }
         TaskView.High -> open.count { it.priority == Priority.High }
         TaskView.All -> open.size
@@ -108,6 +114,12 @@ fun sectionsFor(view: TaskView, snap: Snapshot, today: LocalDate): List<Section>
     val sections = when (view) {
         TaskView.Today -> listOf(
             overdue,
+            // Planned to start by today, due later: the nudge to begin before it's urgent.
+            Section(
+                "startToday", "Start today",
+                open.filter { it.startsBy(today) }.sortedWith(compareBy<TaskItem>({ it.startAt }).then(openTaskOrder)),
+                showDate = true,
+            ),
             Section("today", "Today", open.filter { it.date == today }.sortedWith(openTaskOrder), showDate = false),
             Section(
                 "doneToday", "Completed today",

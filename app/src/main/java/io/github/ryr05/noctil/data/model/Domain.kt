@@ -3,6 +3,7 @@ package io.github.ryr05.noctil.data.model
 import androidx.compose.ui.graphics.Color
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 data class Folder(val id: Long, val name: String, val sortOrder: Int)
@@ -39,6 +40,8 @@ data class TaskItem(
     val nag: Boolean = false,
     val placeId: Long? = null,
     val alarm: Boolean = false,
+    /** When the student plans to start it. Reminds them then, apart from the deadline reminder. */
+    val startAt: LocalDateTime? = null,
 ) {
     /** Minutes the task takes up on the calendar. */
     val blockMinutes: Int get() = durationMinutes ?: DEFAULT_TASK_MINUTES
