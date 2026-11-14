@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The backup AI: when Gemini is out of free messages (or down), the same chat goes to Noctil's
- * own relay on Cloudflare, which asks Groq (Llama) and then Cloudflare Workers AI. The keys live
+ * own relay on Cloudflare, which asks Groq (gpt-oss) and then Cloudflare Workers AI (Llama). The keys live
  * only on the relay. Requests carry a Firebase App Check token so the relay can tell it's the app.
  */
 object AiRelay {

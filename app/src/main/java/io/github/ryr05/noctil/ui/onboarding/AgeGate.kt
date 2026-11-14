@@ -304,7 +304,7 @@ val TERMS: List<Pair<String, String>> = listOf(
         "that, and only after you confirm. It can't delete anything. Your chats are saved on this phone for 7 days and you can " +
         "clear them anytime. Gemini is used through Google's free service, so Google may use what is sent to improve its " +
         "products, and trained reviewers may read it. Please don't put private details in tasks or messages. AI stays off " +
-        "until you turn it on, and Noctil AI still works in a simpler offline mode without it. If Gemini is busy or out of free messages, the same request may instead be answered by Groq (Llama models) or Cloudflare Workers AI, through Noctil's own relay on Cloudflare; they receive the same information, it isn't stored by the relay, and their own terms apply. Gemini isn't offered in the " +
+        "until you turn it on, and Noctil AI still works in a simpler offline mode without it. If Gemini is busy or out of free messages, the same request may instead be answered by Groq (open models such as gpt-oss) or Cloudflare Workers AI, through Noctil's own relay on Cloudflare; they receive the same information, it isn't stored by the relay, and their own terms apply. Gemini isn't offered in the " +
         "European Economic Area, Switzerland or the United Kingdom.",
     "Plans are suggestions" to
         "Plans, reminders and AI answers can be wrong. Always check due dates with your class. Noctil is provided as is, " +
