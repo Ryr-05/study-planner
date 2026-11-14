@@ -59,7 +59,7 @@ import io.github.ryr05.noctil.reminders.StartReminders
 import io.github.ryr05.noctil.ui.components.GlassSheet
 import io.github.ryr05.noctil.ui.components.relativeDay
 import io.github.ryr05.noctil.ui.components.timeFormat
-import io.github.ryr05.noctil.ui.plan.AiConsentDialog
+import io.github.ryr05.noctil.ui.assistant.AiConsentDialog
 import io.github.ryr05.noctil.ui.theme.Palette
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.HourglassBottom
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Sell
@@ -176,10 +177,12 @@ private fun QuickAddPanel(
     val lead = remember(size) { StartHabits.leadFor(context, size) }
     val suggested = if (parsed.dateIsDefault) null
     else StartReminders.suggest(parsed.date, parsed.time, parsed.recurrence != null, LocalDateTime.now(), lead)
+    // "Lab project mon to fri" starts Monday morning.
+    val fromRange = parsed.startDate?.atTime(9, 0)?.takeIf { it.isAfter(LocalDateTime.now()) }
     val startAt = when (val pick = start) {
         StartPick.Off -> null
         is StartPick.At -> pick.at
-        StartPick.Auto -> parsed.startAt ?: suggested
+        StartPick.Auto -> parsed.startAt ?: fromRange ?: suggested
     }
     // A list picked from a suggestion (one whose name has spaces, so it can't be typed with ~).
     var pickedList by remember { mutableStateOf<QuickSuggest.NamedThing?>(null) }
@@ -284,7 +287,7 @@ private fun QuickAddPanel(
                     chips.forEach { chip ->
                         ParsedChip(chip) {
                             if (pickedList != null && chip.kind == TokenKind.List && parsed.listName == null) pickedList = null
-                            else disabled = disabled + chip.kind
+                            else disabled = disabled + listOfNotNull(chip.kind, chip.also)
                         }
                     }
                     if (startAt != null || offerStart) {
@@ -329,7 +332,7 @@ private fun QuickAddPanel(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Type it naturally: friday next week 5pm, tmrw 3-5pm, every monday, start thu 7pm, !1, #exam, ~Chemistry",
+                text = "Type it naturally: essay due fri 5pm start thu, tmrw 3-5pm, every monday, !1, #exam, ~Chemistry",
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.TextSecondary,
             )
@@ -349,7 +352,7 @@ private fun QuickAddPanel(
     }
 }
 
-private data class Chip(val kind: TokenKind, val icon: ImageVector, val label: String, val color: Color)
+private data class Chip(val kind: TokenKind, val icon: ImageVector, val label: String, val color: Color, val also: TokenKind? = null)
 
 /** What the Start chip does: follow the text or the suggestion, a picked time, or no start reminder. */
 private sealed interface StartPick {
@@ -358,18 +361,22 @@ private sealed interface StartPick {
     data class At(val at: LocalDateTime) : StartPick
 }
 
+/**
+ * The deadline is one chip, "Due Fri, 5:00 PM", next to "Start Thu 7:00 PM": the same two words
+ * and icons as in the task's details, so it always reads the same way.
+ */
 private fun chipsFor(p: ParsedInput, today: LocalDate, hasStart: Boolean): List<Chip> = buildList {
-    if (p.date != null && !p.dateIsDefault) {
-        val day = p.startDate?.let { "${relativeDay(it, today)} to ${relativeDay(p.date, today)}" } ?: relativeDay(p.date, today)
-        // With a start time next to it, say which one is the deadline.
-        val label = if (hasStart) "Due $day" else day
-        add(Chip(TokenKind.Date, Icons.Rounded.CalendarMonth, label, Palette.Lavender))
-    }
     val lengthTyped = p.tokens.any { it.kind == TokenKind.Duration }
-    p.time?.let { t ->
+    val typedDay = p.date != null && !p.dateIsDefault
+    val time = p.time?.let { t ->
         val range = p.durationMinutes?.takeIf { !lengthTyped }?.let { t.plusMinutes(it.toLong()) }
-        val label = if (range != null) "${t.format(timeFormat)} to ${range.format(timeFormat)}" else t.format(timeFormat)
-        add(Chip(TokenKind.Time, Icons.Rounded.Schedule, label, Palette.Lavender))
+        if (range != null) "${t.format(timeFormat)} to ${range.format(timeFormat)}" else t.format(timeFormat)
+    }
+    if (typedDay || time != null) {
+        val day = if (typedDay) relativeDay(p.date!!, today) else null
+        val label = "Due " + listOfNotNull(day, time).joinToString(", ")
+        val kind = if (typedDay) TokenKind.Date else TokenKind.Time
+        add(Chip(kind, Icons.Rounded.HourglassBottom, label, Palette.Lavender, also = if (typedDay && time != null) TokenKind.Time else null))
     }
     if (lengthTyped) p.durationMinutes?.let { add(Chip(TokenKind.Duration, Icons.Rounded.Timelapse, lengthLabel(it), Palette.Lavender)) }
     p.recurrence?.let { add(Chip(TokenKind.Repeat, Icons.Rounded.EventRepeat, it.label(), Palette.Lavender)) }

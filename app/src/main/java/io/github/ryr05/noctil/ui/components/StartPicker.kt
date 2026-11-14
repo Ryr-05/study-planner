@@ -27,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -54,55 +53,85 @@ fun StartChoiceText(choice: StartReminders.Choice, today: LocalDate) {
     }
 }
 
-private val TIMES = listOf(
+/** Which date the picker sets. Both use the same screen, so they feel like one system. */
+enum class WhenKind { Due, Start }
+
+private val START_TIMES = listOf(
     "Morning" to LocalTime.of(9, 0),
     "Afternoon" to LocalTime.of(14, 0),
     "Evening" to LocalTime.of(19, 0),
     "Night" to LocalTime.of(21, 0),
 )
 
+// The times deadlines usually are: start of class, noon, end of the work day, midnight.
+private val DUE_TIMES = listOf(
+    LocalTime.of(9, 0),
+    LocalTime.of(12, 0),
+    LocalTime.of(17, 0),
+    LocalTime.of(23, 59),
+)
+
 /**
- * Pick when to start on one screen: tap a day, tap a time, done. "Other" opens the full
- * calendar or clock only for the rare odd time.
+ * Pick a due date or a start on one screen: tap a day, tap a time, done. "Other" opens the
+ * full calendar or clock only for the rare odd day or time. For a start, quick picks like
+ * "1 day before" set it in one tap.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun StartPickerDialog(
-    initial: LocalDateTime?,
+fun WhenPickerDialog(
+    kind: WhenKind,
+    initialDay: LocalDate?,
+    initialTime: LocalTime?,
+    today: LocalDate,
     dueDate: LocalDate?,
     dueTime: LocalTime?,
-    today: LocalDate,
     onDismiss: () -> Unit,
-    onPick: (LocalDateTime) -> Unit,
+    onPick: (LocalDate, LocalTime?) -> Unit,
+    onRemove: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val start = kind == WhenKind.Start
     val deadline = dueDate?.atTime(dueTime ?: LocalTime.MAX)
     var day by remember {
-        mutableStateOf(initial?.toLocalDate() ?: dueDate?.minusDays(1)?.takeIf { !it.isBefore(today) } ?: today)
+        mutableStateOf(
+            initialDay ?: if (start) dueDate?.minusDays(1)?.takeIf { !it.isBefore(today) } ?: today else today,
+        )
     }
-    var time by remember { mutableStateOf(initial?.toLocalTime() ?: StartReminders.EVENING) }
+    var time by remember { mutableStateOf(initialTime ?: if (start) StartReminders.EVENING else null) }
     var otherDay by remember { mutableStateOf(false) }
     var otherTime by remember { mutableStateOf(false) }
-    val at = day.atTime(time)
     val now = LocalDateTime.now()
-    val problem = when {
-        !at.isAfter(now) -> "That time has passed"
-        deadline != null && !at.isBefore(deadline) -> "That's after the deadline"
-        else -> null
+    val problem = if (!start) null else {
+        val at = day.atTime(time ?: StartReminders.EVENING)
+        when {
+            !at.isAfter(now) -> "That time has passed"
+            deadline != null && !at.isBefore(deadline) -> "That's after the deadline"
+            else -> null
+        }
     }
-    // Today up to the deadline (at most a week), so every button is a real option.
-    val lastDay = listOfNotNull(today.plusDays(6), dueDate).min()
+    // A start can only be up to the deadline; a deadline can be any day.
+    val lastDay = if (start) listOfNotNull(today.plusDays(6), dueDate).min() else today.plusDays(6)
     val days = generateSequence(today) { it.plusDays(1) }.takeWhile { !it.isAfter(lastDay) }.toList()
+    val quick = if (start) StartReminders.choices(dueDate, dueTime, now).filter { it.hint != null }.take(3) else emptyList()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Palette.SurfaceHigh,
-        title = { Text("When will you start?", color = Palette.TextPrimary) },
+        title = { Text(if (start) "When will you start?" else "When is it due?", color = Palette.TextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (dueDate != null) {
-                    val due = relativeDay(dueDate, today) + (dueTime?.let { ", ${it.format(timeFormat)}" } ?: "")
-                    Text("Due $due", style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary)
+                if (start && dueDate != null) {
+                    Text("Due ${dueText(dueDate, dueTime, today)}", style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary)
+                }
+                if (quick.isNotEmpty()) {
+                    Text("Quick picks", style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        quick.forEach { c ->
+                            PickPill("${c.hint}, ${c.at.toLocalTime().format(timeFormat)}", selected = false) {
+                                onPick(c.at.toLocalDate(), c.at.toLocalTime())
+                            }
+                        }
+                    }
                 }
                 Text("Day", style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,27 +143,30 @@ fun StartPickerDialog(
                         }
                         PickPill(label, selected = d == day) { day = d }
                     }
-                    PickPill("Other day", selected = day !in days) { otherDay = true }
+                    PickPill(if (day in days) "Other day" else day.format(DateTimeFormatter.ofPattern("MMM d")), selected = day !in days) { otherDay = true }
                 }
                 Text("Time", style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TIMES.forEach { (name, t) ->
-                        PickPill("$name ${t.format(timeFormat)}", selected = t == time) { time = t }
+                    if (start) {
+                        START_TIMES.forEach { (name, t) -> PickPill("$name ${t.format(timeFormat)}", selected = t == time) { time = t } }
+                    } else {
+                        PickPill("No time", selected = time == null) { time = null }
+                        DUE_TIMES.forEach { t -> PickPill(t.format(timeFormat), selected = t == time) { time = t } }
                     }
-                    PickPill(
-                        if (TIMES.none { it.second == time }) time.format(timeFormat) else "Other time",
-                        selected = TIMES.none { it.second == time },
-                    ) { otherTime = true }
+                    val presets = if (start) START_TIMES.map { it.second } else DUE_TIMES
+                    val custom = time != null && time !in presets
+                    PickPill(if (custom) time!!.format(timeFormat) else "Other time", selected = custom) { otherTime = true }
                 }
-                val ahead = dueDate?.let { ChronoUnit.DAYS.between(day, it) }
-                val summary = problem ?: buildString {
-                    append("Start ").append(StartReminders.label(at, today))
-                    when (ahead) {
-                        null -> Unit
-                        0L -> append(", the day it's due")
-                        1L -> append(", 1 day before it's due")
-                        else -> append(", $ahead days before it's due")
+                val summary = problem ?: if (start) {
+                    val ahead = dueDate?.let { ChronoUnit.DAYS.between(day, it) }
+                    "Start " + StartReminders.label(day.atTime(time ?: StartReminders.EVENING), today) + when (ahead) {
+                        null -> ""
+                        0L -> ", the day it's due"
+                        1L -> ", 1 day before it's due"
+                        else -> ", $ahead days before it's due"
                     }
+                } else {
+                    "Due " + dueText(day, time, today) + if (time == null) " (any time that day)" else ""
                 }
                 Text(
                     summary,
@@ -142,10 +174,21 @@ fun StartPickerDialog(
                     color = if (problem != null) Palette.PriorityHigh else Palette.TextPrimary,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                if (onRemove != null) {
+                    Text(
+                        if (start) "Remove start" else "Remove deadline",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Palette.PriorityHigh,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button, onClick = onRemove)
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onPick(at) }, enabled = problem == null) { Text("Set start") }
+            TextButton(onClick = { onPick(day, time) }, enabled = problem == null) { Text(if (start) "Set start" else "Set due") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Palette.TextPrimary) } },
     )
@@ -166,7 +209,8 @@ fun StartPickerDialog(
         ) { DatePicker(state = state) }
     }
     if (otherTime) {
-        val state = rememberTimePickerState(time.hour, time.minute, DateFormat.is24HourFormat(context))
+        val shown = time ?: LocalTime.of(17, 0)
+        val state = rememberTimePickerState(shown.hour, shown.minute, DateFormat.is24HourFormat(context))
         TimePickerDialog(
             onDismissRequest = { otherTime = false },
             title = { Text("Pick a time", style = MaterialTheme.typography.labelLarge, color = Palette.TextSecondary) },
@@ -180,6 +224,30 @@ fun StartPickerDialog(
         ) { TimePicker(state = state) }
     }
 }
+
+/** The start picker, as quick add uses it. */
+@Composable
+fun StartPickerDialog(
+    initial: LocalDateTime?,
+    dueDate: LocalDate?,
+    dueTime: LocalTime?,
+    today: LocalDate,
+    onDismiss: () -> Unit,
+    onPick: (LocalDateTime) -> Unit,
+) = WhenPickerDialog(
+    kind = WhenKind.Start,
+    initialDay = initial?.toLocalDate(),
+    initialTime = initial?.toLocalTime(),
+    today = today,
+    dueDate = dueDate,
+    dueTime = dueTime,
+    onDismiss = onDismiss,
+    onPick = { d, t -> onPick(d.atTime(t ?: StartReminders.EVENING)) },
+)
+
+/** "Fri, Nov 20, 11:59 PM", or "Tomorrow" when it's close. */
+fun dueText(date: LocalDate, time: LocalTime?, today: LocalDate): String =
+    relativeDay(date, today) + (time?.let { ", ${it.format(timeFormat)}" } ?: "")
 
 @Composable
 private fun PickPill(label: String, selected: Boolean, onClick: () -> Unit) {

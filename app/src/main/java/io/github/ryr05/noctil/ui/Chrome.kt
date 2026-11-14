@@ -30,6 +30,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Person
@@ -42,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,13 +68,17 @@ import io.github.ryr05.noctil.ui.theme.rememberReduceMotion
 enum class Tab(val label: String, val icon: ImageVector) {
     Tasks("Tasks", Icons.Rounded.TaskAlt),
     Calendar("Calendar", Icons.Rounded.CalendarMonth),
+    Chat("Noctil AI", Icons.Rounded.AutoAwesome),
     Habits("Habits", Icons.Rounded.LocalFireDepartment),
     Focus("Focus", Icons.Rounded.Timer),
     Me("Me", Icons.Rounded.Person),
 }
 
-/** Bar slots, left to right. Slot 2 is the + button. */
-private val slots = listOf(Tab.Tasks, Tab.Calendar, null, Tab.Habits, Tab.Focus)
+/** Bar slots, left to right. The + floats above the bar on the right. */
+private val slots = listOf(Tab.Tasks, Tab.Calendar, Tab.Chat, Tab.Habits, Tab.Focus)
+
+/** Opens a new Noctil AI chat; the ✨ button next to the profile button on every main screen. */
+val LocalOpenAssistant = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * Keeps small chrome (tab labels, chips) readable at big text sizes without breaking the layout:
@@ -85,30 +91,23 @@ fun CappedText(max: Float = 1.3f, content: @Composable () -> Unit) {
 }
 
 /**
- * Floating glass tab bar with a raised + in the middle. The highlight moves like a drop of liquid:
- * its leading edge springs ahead and the trailing edge catches up.
+ * Floating glass tab bar with five even tabs. The highlight moves like a drop of liquid: its
+ * leading edge springs ahead and the trailing edge catches up.
  */
 @Composable
-fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit, onAdd: () -> Unit, modifier: Modifier = Modifier) {
+fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
     CappedText {
-        Box(modifier.fillMaxWidth().padding(top = 18.dp), contentAlignment = Alignment.TopCenter) {
-            GlassSurface(modifier = Modifier.fillMaxWidth().height(68.dp), shape = CircleShape) {
-                BoxWithConstraints(Modifier.fillMaxSize().padding(5.dp)) {
-                    val slotWidth = maxWidth / slots.size
-                    val index = slots.indexOf(selected).takeIf { it >= 0 }
-                    Indicator(index, slotWidth)
-                    Row(Modifier.fillMaxSize()) {
-                        slots.forEach { tab ->
-                            if (tab == null) {
-                                Spacer(Modifier.weight(1f))
-                            } else {
-                                TabItem(tab, tab == selected, { onSelect(tab) }, Modifier.weight(1f).fillMaxHeight())
-                            }
-                        }
+        GlassSurface(modifier = modifier.fillMaxWidth().height(68.dp), shape = CircleShape) {
+            BoxWithConstraints(Modifier.fillMaxSize().padding(5.dp)) {
+                val slotWidth = maxWidth / slots.size
+                val index = slots.indexOf(selected).takeIf { it >= 0 }
+                Indicator(index, slotWidth)
+                Row(Modifier.fillMaxSize()) {
+                    slots.forEach { tab ->
+                        TabItem(tab, tab == selected, { onSelect(tab) }, Modifier.weight(1f).fillMaxHeight())
                     }
                 }
             }
-            AddButton(onAdd, Modifier.offset(y = (-18).dp))
         }
     }
 }
@@ -174,7 +173,7 @@ fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     )
     Box(
         modifier = modifier
-            .size(64.dp)
+            .size(62.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -199,14 +198,26 @@ fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** The round button at the top right of each screen that opens Me (settings, account, stats). */
+/**
+ * The round buttons at the top right of each main screen: ✨ opens a new Noctil AI chat, and
+ * the person opens Me (settings, account, stats).
+ */
 @Composable
 fun ProfileButton(onClick: () -> Unit) {
-    RoundIconButton(Icons.Rounded.Person, "Me and settings", onClick = onClick)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        LocalOpenAssistant.current?.let { openAssistant ->
+            RoundIconButton(Icons.Rounded.AutoAwesome, "Ask Noctil AI", onClick = openAssistant)
+            Spacer(Modifier.width(8.dp))
+        }
+        RoundIconButton(Icons.Rounded.Person, "Me and settings", onClick = onClick)
+    }
 }
 
-/** The bottom bar as it sits on screen, for screenshot tests. */
+/** The bottom bar and the floating + as they sit on screen, for screenshot tests. */
 @Composable
 fun ScreenshotChrome() {
-    BottomBar(Tab.Tasks, {}, {}, Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
+    Column(Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 12.dp), horizontalAlignment = Alignment.End) {
+        AddButton({}, Modifier.padding(end = 4.dp, bottom = 12.dp))
+        BottomBar(Tab.Tasks, {})
+    }
 }

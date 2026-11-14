@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.rounded.HourglassBottom
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.foundation.layout.heightIn
 import io.github.ryr05.noctil.data.model.Priority
@@ -266,7 +267,12 @@ private fun RowContent(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (whenText.isNotEmpty()) {
-                        Meta(Icons.Rounded.Schedule, whenText, if (overdue) Palette.PriorityHigh else Palette.TextSecondary)
+                        // Next to a start, say which one is the deadline.
+                        Meta(
+                            if (startText != null) Icons.Rounded.HourglassBottom else Icons.Rounded.Schedule,
+                            if (startText != null) "Due $whenText" else whenText,
+                            if (overdue) Palette.PriorityHigh else Palette.TextSecondary,
+                        )
                     }
                     if (startText != null) Meta(Icons.Rounded.PlayCircle, startText, Palette.Lavender)
                     if (task.recurrence != null) Meta(Icons.Rounded.EventRepeat, null, Palette.TextSecondary)

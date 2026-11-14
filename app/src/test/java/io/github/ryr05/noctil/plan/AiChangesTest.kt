@@ -97,10 +97,55 @@ class AiChangesTest {
         assertEquals(listOf("Lab report 3 nov 20 11:59pm #chem"), read.tasks)
     }
 
-    @Test fun aiSeesTwoWeeksAndStartedTasks() {
+    @Test fun aiSeesAllOpenTasksSoonestFirst() {
         val far = task(2, "Term paper", today.plusDays(30))
-        val farStarted = task(3, "Thesis", today.plusDays(30), start = today.plusDays(1).atTime(19, 0))
         val noDate = task(4, "Someday", null)
-        assertEquals(listOf(1L, 3L), AiChangeGuard.visibleTasks(listOf(essay, far, farStarted, noDate), today).map { it.id })
+        val done = task(5, "Finished", today).copy(done = true)
+        assertEquals(listOf(1L, 2L, 4L), AiChangeGuard.visibleTasks(listOf(noDate, far, essay, done), today).map { it.id })
+    }
+
+    @Test fun otherEditsOnlyWhenTheyChangeSomething() {
+        val lists = listOf(io.github.ryr05.noctil.data.model.TaskList(5, "Chemistry", Color.White, null))
+        val c = AiChangeGuard.check(
+            listOf(
+                AiChange(1, title = "History essay draft", priority = Priority.High, tagsAdd = listOf("history"), list = "chemistry", done = true),
+            ),
+            known, "rename it and mark it done", now, lists,
+        )
+        val f = c.fields.single()
+        assertEquals("History essay draft", f.title)
+        assertEquals(Priority.High, f.priority)
+        assertEquals(listOf("history"), f.tagsAdd)
+        assertEquals(5L, f.list?.id)
+        assertTrue(f.done)
+        val unknown = AiChangeGuard.check(listOf(AiChange(1, list = "Physics")), known, "move it to physics", now, lists)
+        assertTrue(unknown.fields.isEmpty())
+        assertEquals(listOf("Physics"), unknown.unknownLists)
+        // Same title as now: nothing to do.
+        assertTrue(AiChangeGuard.check(listOf(AiChange(1, title = "Essay")), known, "rename", now, lists).fields.isEmpty())
+    }
+
+    @Test fun parsesEditsHabitsAndPlanIds() {
+        val c = AiChange.parse(JSONObject("""{"id": 1, "title": "Draft", "priority": "high", "tags_add": ["#hist", "bad tag"], "list": "School", "done": true}"""))!!
+        assertEquals("Draft", c.title)
+        assertEquals(Priority.High, c.priority)
+        assertEquals(listOf("hist"), c.tagsAdd)
+        assertEquals("School", c.list)
+        assertTrue(c.done)
+        val water = AiHabit.parse(JSONObject("""{"name": "Drink water", "goal": 8, "days": ["daily"], "reminder": "09:00"}"""))!!
+        assertEquals(8, water.goal)
+        assertEquals(7, water.days.size)
+        assertEquals(LocalTime.of(9, 0), water.reminder)
+        val gym = AiHabit.parse(JSONObject("""{"name": "Gym", "days": ["mon", "wed", "fri"]}"""))!!
+        assertEquals(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.FRIDAY), gym.days)
+        val reply = AiReply.parse("""{"reply":"ok","action":"plan","plan_task_ids":[1,2],"new_habits":[{"name":"Read","goal":1,"days":["weekdays"]}],"lengths":[],"favored_ids":[]}""")
+        assertEquals(listOf(1L, 2L), reply.planTaskIds)
+        assertEquals(5, reply.newHabits.single().days.size)
+    }
+
+    @Test fun separateItemsForOneTaskAreMerged() {
+        val c = AiChangeGuard.check(listOf(AiChange(1, title = "Bio chapter 5"), AiChange(1, priority = Priority.High)), known, "rename it and make it high priority", now)
+        assertEquals("Bio chapter 5", c.fields.single().title)
+        assertEquals(Priority.High, c.fields.single().priority)
     }
 }

@@ -411,7 +411,7 @@ fun TimelineView(tasks: List<TaskItem>, today: LocalDate, taskActions: TaskActio
 @Composable
 private fun TimelineViewBody(tasks: List<TaskItem>, today: LocalDate, taskActions: TaskActions, bottomPadding: androidx.compose.ui.unit.Dp) {
     val dated = tasks.filter { !it.done && it.date != null }
-        .sortedWith(compareBy({ it.startDate ?: it.date }, { it.date }))
+        .sortedWith(compareBy({ it.barStart() ?: it.date }, { it.date }))
     if (dated.isEmpty()) {
         io.github.ryr05.noctil.ui.components.EmptyHint(
             icon = androidx.compose.material.icons.Icons.Rounded.ViewTimeline,
@@ -423,7 +423,7 @@ private fun TimelineViewBody(tasks: List<TaskItem>, today: LocalDate, taskAction
         )
         return
     }
-    val first = minOf(today.minusDays(2), dated.minOf { it.startDate ?: it.date!! })
+    val first = minOf(today.minusDays(2), dated.minOf { it.barStart() ?: it.date!! })
     val last = maxOf(first.plusDays(20), dated.maxOf { it.date!! }.plusDays(3)).let { if (ChronoUnit.DAYS.between(first, it) > 120) first.plusDays(120) else it }
     val days = ChronoUnit.DAYS.between(first, last).toInt() + 1
     val hScroll = rememberScrollState(with(LocalDensity.current) { (dayWidth * ChronoUnit.DAYS.between(first, today).toInt().coerceAtLeast(0) - 8.dp).roundToPx().coerceAtLeast(0) })
@@ -487,11 +487,11 @@ private fun TimelineViewBody(tasks: List<TaskItem>, today: LocalDate, taskAction
                     ) {
                         dated.forEachIndexed { row, task ->
                             val due = task.date!!
-                            val start = (task.startDate?.takeIf { !it.isAfter(due) }) ?: due
+                            val start = (task.barStart()?.takeIf { !it.isAfter(due) }) ?: due
                             val startIdx = ChronoUnit.DAYS.between(first, start).toInt().coerceAtLeast(0)
                             val endIdx = ChronoUnit.DAYS.between(first, due).toInt().coerceAtMost(days - 1)
                             val color = if (due.isBefore(today)) Palette.PriorityHigh else task.list?.color ?: Palette.Lavender
-                            val isBar = task.startDate != null && start.isBefore(due)
+                            val isBar = task.barStart() != null && start.isBefore(due)
                             Box(
                                 Modifier
                                     .offset(x = dayWidth * startIdx + 4.dp, y = rowHeight * row + 10.dp)
@@ -512,3 +512,6 @@ private fun TimelineViewBody(tasks: List<TaskItem>, today: LocalDate, taskAction
         }
     }
 }
+
+/** Where a task's timeline bar begins: its start (or an older "from" date). */
+private fun io.github.ryr05.noctil.data.model.TaskItem.barStart(): java.time.LocalDate? = startAt?.toLocalDate() ?: startDate

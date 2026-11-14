@@ -80,7 +80,7 @@ import java.time.ZoneId
  * (and as a Live Update on Android 16), and an alarm tells you when the session is done.
  */
 @Composable
-fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {}, onOpenPlanner: () -> Unit = {}) {
+fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {}) {
     val context = LocalContext.current
     val state by FocusEngine.state.collectAsState()
     val now by produceState(System.currentTimeMillis(), state.running) {
@@ -105,12 +105,6 @@ fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {},
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ScreenTitle(title = "Focus", overline = focusSummary(todaySessions, todayMinutes), modifier = Modifier.weight(1f))
                 io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
-            }
-        }
-        if (!state.running) {
-            item(key = "planner") {
-                Spacer(Modifier.height(18.dp))
-                PlannerCard(onOpenPlanner)
             }
         }
         item(key = "modes") {
@@ -161,36 +155,6 @@ fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {},
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.TextSecondary,
                 modifier = Modifier.padding(start = 4.dp, top = 10.dp),
-            )
-        }
-    }
-}
-
-/** Entry to "Plan my session": put tasks in an order that fits the time you have. */
-@Composable
-private fun PlannerCard(onOpen: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.horizontalGradient(listOf(Palette.Lavender.copy(alpha = 0.22f), Palette.Surface)))
-            .clickable(role = Role.Button, onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(Palette.Lavender.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(22.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Plan my session", style = MaterialTheme.typography.titleMedium, color = Palette.TextPrimary)
-            Text(
-                "Pick what's due, answer a question or two, get an order that fits your time.",
-                style = MaterialTheme.typography.labelMedium,
-                color = Palette.TextSecondary,
             )
         }
     }

@@ -78,6 +78,9 @@ import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
 import io.github.ryr05.noctil.reminders.StartReminders
 import io.github.ryr05.noctil.ui.quickadd.AddSeveralSheet
+import io.github.ryr05.noctil.ui.assistant.AssistantScreen
+import io.github.ryr05.noctil.ui.assistant.AssistantSession
+import io.github.ryr05.noctil.ui.assistant.ChatStore
 import io.github.ryr05.noctil.ui.calendar.CalendarScreen
 import io.github.ryr05.noctil.ui.components.AuroraBackground
 import io.github.ryr05.noctil.ui.detail.DetailActions
@@ -163,6 +166,17 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
         if (tab != Tab.Me) tabBeforeMe = tab
         tab = Tab.Me
     }
+    // The open Noctil AI chat, if any. The tab shows recent chats when it's null.
+    var assistant by remember { mutableStateOf<AssistantSession?>(null) }
+    val closeChat = {
+        assistant?.close()
+        assistant = null
+    }
+    val openNewChat = {
+        assistant?.close()
+        assistant = AssistantSession(context)
+        tab = Tab.Chat
+    }
     var viewKey by rememberSaveable { mutableStateOf(TaskView.Today.key) }
     val view = TaskView.fromKey(viewKey)
     var calendarDay by rememberSaveable { mutableStateOf(LocalDate.now()) }
@@ -182,7 +196,6 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
     var habitOpenId by rememberSaveable { mutableStateOf<Long?>(null) }
     var habitEditing by remember { mutableStateOf<HabitEdit?>(null) }
     var statsOpen by rememberSaveable { mutableStateOf(false) }
-    var planOpen by rememberSaveable { mutableStateOf(false) }
     var layout by rememberSaveable { mutableStateOf(TaskLayout.List) }
     var selection by remember { mutableStateOf<Set<Long>?>(null) }
     var stageEditing by remember { mutableStateOf<StageEdit?>(null) }
@@ -370,7 +383,7 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
 
     BackHandler(
         enabled = detailStack.isNotEmpty() || quickAddOpen || severalOpen || searchOpen || drawerOpen || slot != null ||
-            timetableOpen || syncOpen || habitOpenId != null || statsOpen || planOpen || selection != null ||
+            timetableOpen || syncOpen || habitOpenId != null || statsOpen || selection != null ||
             tab != Tab.Tasks || view != TaskView.Today,
     ) {
         when {
@@ -381,18 +394,18 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
             slot != null -> slot = null
             habitOpenId != null -> habitOpenId = null
             statsOpen -> statsOpen = false
-            planOpen -> planOpen = false
             timetableOpen -> timetableOpen = false
             syncOpen -> syncOpen = false
             searchOpen -> searchOpen = false
             drawerOpen -> drawerOpen = false
+            tab == Tab.Chat && assistant != null -> closeChat()
             tab == Tab.Me -> tab = tabBeforeMe
             tab != Tab.Tasks -> tab = Tab.Tasks
             else -> viewKey = TaskView.Today.key
         }
     }
 
-    CompositionLocalProvider(LocalHazeState provides hazeState) {
+    CompositionLocalProvider(LocalHazeState provides hazeState, LocalOpenAssistant provides openNewChat) {
         Box(Modifier.fillMaxSize().background(Palette.Night)) {
             // Everything inside this box is what the glass controls blur.
             Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
@@ -451,7 +464,20 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                                 },
                             ),
                         )
-                        Tab.Focus -> FocusScreen(snapshot, today, onOpenMe = openMe, onOpenPlanner = { planOpen = true })
+                        Tab.Focus -> FocusScreen(snapshot, today, onOpenMe = openMe)
+                        Tab.Chat -> AssistantScreen(
+                            session = assistant,
+                            snapshot = snapshot,
+                            today = today,
+                            onNewChat = openNewChat,
+                            onOpenChat = { id ->
+                                assistant?.close()
+                                assistant = AssistantSession(context, ChatStore.load(context, id))
+                            },
+                            onCloseChat = closeChat,
+                            onOpenMe = openMe,
+                            onFocusStarted = { tab = Tab.Focus },
+                        )
                         Tab.Me -> MeScreen(
                             askedForNotificationsBefore = repo.askedForNotifications,
                             onAskNotifications = { askForNotificationsOnce() },
@@ -479,7 +505,16 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                         if (it == Tab.Tasks && tab == Tab.Tasks) drawerOpen = true
                         tab = it
                     },
-                    onAdd = {
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+            }
+            // The + floats above the bar on the right. The chat has its own input, so it's hidden there.
+            if (tab != Tab.Me && tab != Tab.Chat) {
+                AddButton(
+                    onClick = {
                         if (tab == Tab.Habits) {
                             habitEditing = HabitEdit(null)
                         } else {
@@ -488,9 +523,9 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
                         }
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
+                        .align(Alignment.BottomEnd)
                         .navigationBarsPadding()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                        .padding(end = 20.dp, bottom = 94.dp),
                 )
             }
             }
@@ -569,16 +604,6 @@ fun NoctilApp(launchRequest: LaunchRequest?, onLaunchHandled: () -> Unit) {
 
             StatsSheet(visible = statsOpen, snapshot = snapshot, today = today, onDismiss = { statsOpen = false })
 
-            io.github.ryr05.noctil.ui.plan.PlanSheet(
-                visible = planOpen,
-                snapshot = snapshot,
-                today = today,
-                onDismiss = { planOpen = false },
-                onFocusStarted = {
-                    planOpen = false
-                    tab = Tab.Focus
-                },
-            )
 
             val quickAddDefaultDate = when {
                 tab == Tab.Calendar -> calendarDay
@@ -774,7 +799,7 @@ private fun UndoBar(
         visible = message != null,
         enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it },
         exit = fadeOut(tween(160)) + slideOutVertically(tween(200)) { it },
-        modifier = modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 92.dp),
+        modifier = modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 168.dp),
     ) {
         GlassSurface(modifier = Modifier.fillMaxWidth().height(52.dp), shape = CircleShape, tintAlpha = 0.8f) {
             Row(

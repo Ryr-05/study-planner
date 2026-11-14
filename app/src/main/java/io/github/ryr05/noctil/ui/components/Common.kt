@@ -32,8 +32,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.ryr05.noctil.ui.theme.Palette
 
-/** Height reserved at the bottom of every screen for the floating tab bar. */
-val BottomChromeHeight = 104.dp
+/** Height reserved at the bottom of every screen for the floating tab bar and the + above it. */
+val BottomChromeHeight = 164.dp
 
 @Composable
 fun bottomContentPadding(): Dp =

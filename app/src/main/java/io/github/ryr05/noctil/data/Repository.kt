@@ -57,8 +57,9 @@ data class Completion(val taskId: Long, val createdNextId: Long?, val recurrence
 fun TaskEntity.localDate(): LocalDate? = dueDate?.let(LocalDate::ofEpochDay)
 fun TaskEntity.localTime(): LocalTime? = dueTime?.let { LocalTime.of(it / 60, it % 60) }
 fun LocalTime.toMinutes(): Int = hour * 60 + minute
+/** Sets or clears the start. It's also where the timeline bar begins, so the old "from" date goes. */
 fun TaskEntity.withStart(at: LocalDateTime?): TaskEntity =
-    copy(doDay = at?.toLocalDate()?.toEpochDay(), doTime = at?.toLocalTime()?.toMinutes())
+    copy(doDay = at?.toLocalDate()?.toEpochDay(), doTime = at?.toLocalTime()?.toMinutes(), startDate = null)
 fun TaskEntity.startAt(): LocalDateTime? = doDay?.let { LocalDate.ofEpochDay(it).atTime(LocalTime.of((doTime ?: 19 * 60) / 60, (doTime ?: 19 * 60) % 60)) }
 
 /**
@@ -171,6 +172,21 @@ class Repository(
 
     /** Sets or clears when the student plans to start the task. Its own reminder, apart from the deadline. */
     fun setStart(id: Long, at: LocalDateTime?) = update(id) { it.withStart(at) }
+
+    /**
+     * Sets the deadline's day and time in one go. A first deadline gets the default reminder,
+     * and a start that would now be after the deadline is dropped.
+     */
+    fun setDue(id: Long, date: LocalDate?, time: LocalTime?) = update(id) { t ->
+        val reminder = when {
+            date == null -> null
+            t.dueDate == null && t.reminder == null -> 0
+            else -> t.reminder
+        }
+        val moved = t.copy(dueDate = date?.toEpochDay(), dueTime = if (date == null) null else time?.toMinutes(), reminder = reminder)
+        val deadline = date?.atTime(time ?: LocalTime.MAX)
+        if (deadline != null && moved.startAt()?.isBefore(deadline) == false) moved.withStart(null) else moved
+    }
 
     fun setDone(id: Long, done: Boolean, onResult: (Completion) -> Unit = {}) {
         scope.launch { setDoneNow(id, done)?.let(onResult) }
@@ -395,6 +411,7 @@ class Repository(
 
     fun saveHabit(
         id: Long?, name: String, color: Color, days: Set<java.time.DayOfWeek>, goal: Int, reminder: LocalTime?,
+        onSaved: (Long) -> Unit = {},
     ) {
         if (name.isBlank() || days.isEmpty()) return
         scope.launch {
@@ -403,7 +420,10 @@ class Repository(
                 name = name.trim(), color = color.toArgb(), days = days.toMask(), goal = goal.coerceIn(1, 50),
                 reminderMinute = reminder?.toMinutes(), updatedAt = System.currentTimeMillis(),
             )
-            if (existing == null) db.habits().insert(entity) else db.habits().update(entity)
+            if (existing == null) onSaved(db.habits().insert(entity)) else {
+                db.habits().update(entity)
+                onSaved(entity.id)
+            }
         }
     }
 
@@ -478,6 +498,11 @@ class Repository(
 
     fun removeTag(taskId: Long, tagId: Long) {
         scope.launch { db.tags().unlink(taskId, tagId) }
+    }
+
+    /** Undo for a tag added by name. */
+    fun removeTagByName(taskId: Long, name: String) {
+        scope.launch { db.tags().findByName(name.trim().removePrefix("#"))?.let { db.tags().unlink(taskId, it.id) } }
     }
 
     fun updateTag(id: Long, name: String, color: Color) {

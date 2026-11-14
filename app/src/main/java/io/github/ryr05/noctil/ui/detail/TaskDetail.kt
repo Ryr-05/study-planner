@@ -103,9 +103,13 @@ import io.github.ryr05.noctil.data.model.Reminders
 import io.github.ryr05.noctil.data.model.Snapshot
 import io.github.ryr05.noctil.data.model.TaskItem
 import io.github.ryr05.noctil.data.toMinutes
+import androidx.compose.material.icons.rounded.HourglassBottom
+import androidx.compose.material.icons.rounded.Timelapse
+import io.github.ryr05.noctil.ui.components.WhenKind
+import io.github.ryr05.noctil.ui.components.WhenPickerDialog
+import io.github.ryr05.noctil.ui.components.dueText
+import androidx.compose.foundation.layout.heightIn
 import io.github.ryr05.noctil.reminders.StartReminders
-import io.github.ryr05.noctil.ui.components.StartChoiceText
-import io.github.ryr05.noctil.ui.components.StartPickerDialog
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.ui.components.CheckCircle
 import io.github.ryr05.noctil.ui.components.ColorTag
@@ -202,9 +206,9 @@ private fun DetailContent(
     repo: Repository,
     actions: DetailActions,
 ) {
-    var showDate by remember { mutableStateOf(false) }
-    var showTime by remember { mutableStateOf(false) }
+    var showDue by remember { mutableStateOf(false) }
     var showStart by remember { mutableStateOf(false) }
+    var showReminders by remember { mutableStateOf(false) }
     var showPlace by remember { mutableStateOf(false) }
     val parent = task.parentId?.let { snapshot.byId[it] }
 
@@ -262,35 +266,36 @@ private fun DetailContent(
         }
 
         item(key = "props") {
-            Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // When: the deadline, when you'll start, and the reminders for both, in one place.
+                GroupLabel("When")
                 PropertyRow(
-                    icon = Icons.Rounded.CalendarMonth,
-                    label = "Date",
-                    value = task.date?.let { relativeDay(it, today) } ?: "No date",
+                    icon = Icons.Rounded.HourglassBottom,
+                    label = "Due",
+                    value = task.date?.let { dueText(it, task.time, today) } ?: "No deadline",
                     active = task.date != null,
-                    onClick = { showDate = true },
-                    onClear = if (task.date != null) ({ repo.setDate(task.id, null) }) else null,
+                    onClick = { showDue = true },
+                    onClear = if (task.date != null) ({ repo.setDue(task.id, null, null) }) else null,
                 )
+                val now = LocalDateTime.now()
                 PropertyRow(
-                    icon = Icons.Rounded.Schedule,
-                    label = "Time",
-                    value = task.time?.format(timeFormat) ?: "No time",
-                    active = task.time != null,
-                    onClick = { showTime = true },
-                    onClear = if (task.time != null) ({ repo.update(task.id) { it.copy(dueTime = null) } }) else null,
-                )
-                if (task.time != null) DurationRow(task, repo)
-                RepeatRow(task, repo, today)
-                ReminderRow(task, repo, actions.onReminderSet)
-                StartRow(task, repo, today, actions.onReminderSet)
-                PropertyRow(
-                    icon = Icons.Rounded.DateRange,
-                    label = "From",
-                    value = task.startDate?.let { relativeDay(it, today) } ?: "Due day only",
-                    active = task.startDate != null,
+                    icon = Icons.Rounded.PlayCircle,
+                    label = "Start",
+                    value = startText(task, today, now),
+                    active = task.startAt != null || task.startDate != null,
                     onClick = { showStart = true },
-                    onClear = if (task.startDate != null) ({ repo.update(task.id) { it.copy(startDate = null) } }) else null,
+                    onClear = if (task.startAt != null || task.startDate != null) ({ repo.setStart(task.id, null) }) else null,
                 )
+                PropertyRow(
+                    icon = Icons.Rounded.Notifications,
+                    label = "Reminders",
+                    value = remindersText(task, now),
+                    active = task.reminder != null && task.date != null || task.startAt?.isAfter(now) == true,
+                    onClick = { showReminders = true },
+                )
+                RepeatRow(task, repo, today)
+                if (task.time != null) DurationRow(task, repo)
+                GroupLabel("Details")
                 PropertyRow(
                     icon = Icons.Rounded.Place,
                     label = "Place",
@@ -368,29 +373,62 @@ private fun DetailContent(
         }
     }
 
-    if (showDate) {
-        DateDialog(
-            initial = task.date ?: today,
-            onDismiss = { showDate = false },
-            onPick = { date ->
-                showDate = false
-                repo.setDate(task.id, date)
+    if (showDue) {
+        WhenPickerDialog(
+            kind = WhenKind.Due,
+            initialDay = task.date,
+            initialTime = task.time,
+            today = today,
+            dueDate = null,
+            dueTime = null,
+            onDismiss = { showDue = false },
+            onPick = { day, time ->
+                showDue = false
+                repo.setDue(task.id, day, time)
                 actions.onReminderSet()
             },
+            onRemove = if (task.date != null) ({
+                showDue = false
+                repo.setDue(task.id, null, null)
+            }) else null,
         )
     }
     if (showStart) {
-        DateDialog(
-            initial = task.startDate ?: task.date ?: today,
+        val now = LocalDateTime.now()
+        WhenPickerDialog(
+            kind = WhenKind.Start,
+            initialDay = task.startAt?.takeIf { it.isAfter(now) }?.toLocalDate(),
+            initialTime = task.startAt?.takeIf { it.isAfter(now) }?.toLocalTime(),
+            today = today,
+            dueDate = task.date,
+            dueTime = task.time,
             onDismiss = { showStart = false },
-            onPick = { date ->
+            onPick = { day, time ->
                 showStart = false
-                repo.update(task.id) { t ->
-                    // A start after the due date would make no sense; move the due date along.
-                    val due = t.dueDate?.takeIf { it >= date.toEpochDay() } ?: date.toEpochDay()
-                    t.copy(startDate = date.toEpochDay(), dueDate = due)
-                }
+                repo.setStart(task.id, day.atTime(time ?: StartReminders.EVENING))
+                actions.onReminderSet()
             },
+            onRemove = if (task.startAt != null || task.startDate != null) ({
+                showStart = false
+                repo.setStart(task.id, null)
+            }) else null,
+        )
+    }
+    if (showReminders) {
+        RemindersDialog(
+            task = task,
+            today = today,
+            repo = repo,
+            onReminderSet = actions.onReminderSet,
+            onEditStart = {
+                showReminders = false
+                showStart = true
+            },
+            onEditDue = {
+                showReminders = false
+                showDue = true
+            },
+            onDismiss = { showReminders = false },
         )
     }
     if (showPlace) {
@@ -405,19 +443,163 @@ private fun DetailContent(
             repo = repo,
         )
     }
-    if (showTime) {
-        TimeDialog(
-            initial = task.time ?: LocalTime.of(17, 0),
-            onDismiss = { showTime = false },
-            onPick = { time ->
-                showTime = false
-                repo.update(task.id) { t ->
-                    val date = t.dueDate ?: today.toEpochDay()
-                    t.copy(dueTime = time.toMinutes(), dueDate = date, reminder = t.reminder ?: 0)
+}
+
+/** A small label over a group of rows ("When", "Details"). */
+@Composable
+private fun GroupLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = Palette.TextSecondary,
+        modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 2.dp),
+    )
+}
+
+/** "Wed 7:00 PM", "Tue 7:00 PM (passed)", or "No start". Short, so it never gets cut off. */
+private fun startText(task: TaskItem, today: LocalDate, now: LocalDateTime): String {
+    val at = task.startAt ?: return task.startDate?.let { "From ${relativeDay(it, today)}" } ?: "No start"
+    return StartReminders.label(at, today) + if (at.isBefore(now) && !task.done) " (passed)" else ""
+}
+
+/** "At start, 1 hr before due", in plain words. */
+private fun remindersText(task: TaskItem, now: LocalDateTime): String {
+    val parts = buildList {
+        if (task.startAt?.isAfter(now) == true) add("At start")
+        if (task.date != null) dueReminderText(task.reminder, task.time != null)?.let { add(it) }
+    }
+    if (parts.isEmpty()) return "None"
+    val extras = listOfNotNull(if (task.alarm && task.reminder != null) "rings" else null, if (task.nag && task.reminder != null) "repeats" else null)
+    return (parts + extras).joinToString(", ").replaceFirstChar { it.uppercase() }
+}
+
+private fun dueReminderText(minutes: Int?, hasTime: Boolean): String? = when (minutes) {
+    null -> null
+    0 -> if (hasTime) "at due time" else "morning it's due"
+    1440 -> "day before due"
+    60 -> "1 hr before due"
+    else -> "$minutes min before due"
+}
+
+/**
+ * Every reminder for the task on one screen: the start nudge, the deadline reminder, and how
+ * the deadline reminder alerts. No menus inside menus.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RemindersDialog(
+    task: TaskItem,
+    today: LocalDate,
+    repo: Repository,
+    onReminderSet: () -> Unit,
+    onEditStart: () -> Unit,
+    onEditDue: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val now = LocalDateTime.now()
+    val hasTime = task.time != null
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Palette.SurfaceHigh,
+        title = { Text("Reminders", color = Palette.TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // The start nudge.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.PlayCircle, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Time to start", style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
+                        Text(
+                            task.startAt?.takeIf { it.isAfter(now) }?.let { "Nudges you " + StartReminders.label(it, today) } ?: "Set a start to get nudged when it's time to begin",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Palette.TextSecondary,
+                        )
+                    }
+                    TextButton(onClick = onEditStart) { Text(if (task.startAt?.isAfter(now) == true) "Change" else "Set") }
                 }
-                actions.onReminderSet()
-            },
-        )
+                // The deadline reminder.
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.HourglassBottom, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Before it's due", style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
+                            Text(
+                                task.date?.let { "Due " + dueText(it, task.time, today) } ?: "Add a deadline first",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Palette.TextSecondary,
+                            )
+                        }
+                        if (task.date == null) TextButton(onClick = onEditDue) { Text("Set") }
+                    }
+                    if (task.date != null) {
+                        val options = listOf<Int?>(null, 0, 15, 60, 1440).filter { hasTime || it == null || it == 0 || it == 1440 }
+                        FlowRow(
+                            modifier = Modifier.padding(start = 30.dp, top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            options.forEach { m ->
+                                val label = when (m) {
+                                    null -> "Off"
+                                    0 -> if (hasTime) "At due time" else "Morning of, 9 AM"
+                                    15 -> "15 min before"
+                                    60 -> "1 hr before"
+                                    else -> "Day before"
+                                }
+                                ChoicePill(label, selected = task.reminder == m) {
+                                    repo.update(task.id) { it.copy(reminder = m) }
+                                    if (m != null) onReminderSet()
+                                }
+                            }
+                        }
+                    }
+                }
+                // How the deadline reminder alerts.
+                if (task.date != null && task.reminder != null) {
+                    SwitchRow("Ring like an alarm", "Full screen, with sound until you stop it", task.alarm) {
+                        repo.update(task.id) { t -> t.copy(alarm = !task.alarm) }
+                        onReminderSet()
+                    }
+                    SwitchRow("Keep reminding until done", "Every 5 minutes until you tap Done", task.nag) {
+                        repo.update(task.id) { t -> t.copy(nag = !task.nag) }
+                        onReminderSet()
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
+}
+
+@Composable
+private fun ChoicePill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (selected) Palette.OnLavender else Palette.TextPrimary,
+        modifier = Modifier
+            .heightIn(min = 34.dp)
+            .clip(CircleShape)
+            .background(if (selected) Palette.Lavender else Palette.Surface)
+            .border(1.dp, if (selected) Palette.Lavender else Palette.Outline, CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Switch, onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
+            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
+        }
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
 
@@ -479,7 +661,7 @@ private fun DurationRow(task: TaskItem, repo: Repository) {
     }
     Box {
         PropertyRow(
-            icon = Icons.Rounded.HourglassEmpty,
+            icon = Icons.Rounded.Timelapse,
             label = "Length",
             value = label(task.blockMinutes),
             active = task.durationMinutes != null,
@@ -542,148 +724,7 @@ private fun RepeatRow(task: TaskItem, repo: Repository, today: LocalDate) {
     }
 }
 
-@Composable
-private fun ReminderRow(task: TaskItem, repo: Repository, onReminderSet: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val hasTime = task.time != null
-    Box {
-        PropertyRow(
-            icon = Icons.Rounded.Notifications,
-            label = "Remind",
-            value = if (task.date == null) "Add a date first"
-            else Reminders.label(task.reminder, hasTime) +
-                (if (task.alarm && task.reminder != null) ", rings as alarm" else "") +
-                (if (task.nag && task.reminder != null) ", repeats" else ""),
-            active = task.date != null && task.reminder != null,
-            onClick = { if (task.date != null) open = true },
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
-            val choices = listOf<Int?>(null) + Reminders.options.filter { hasTime || it == 0 || it == 1440 }
-            choices.forEach { minutes ->
-                DropdownMenuItem(
-                    text = { Text(Reminders.label(minutes, hasTime), color = Palette.TextPrimary) },
-                    onClick = {
-                        open = false
-                        repo.update(task.id) { it.copy(reminder = minutes) }
-                        if (minutes != null) onReminderSet()
-                    },
-                )
-            }
-            androidx.compose.material3.HorizontalDivider(color = Palette.Hairline)
-            DropdownMenuItem(
-                leadingIcon = {
-                    Icon(
-                        if (task.nag) Icons.Rounded.Check else Icons.Rounded.Repeat,
-                        contentDescription = null,
-                        tint = if (task.nag) Palette.Lavender else Palette.TextSecondary,
-                    )
-                },
-                text = { Text("Keep reminding until done", color = Palette.TextPrimary) },
-                onClick = {
-                    open = false
-                    repo.update(task.id) { it.copy(nag = !task.nag, reminder = it.reminder ?: 0) }
-                    onReminderSet()
-                },
-            )
-            DropdownMenuItem(
-                leadingIcon = {
-                    Icon(
-                        if (task.alarm) Icons.Rounded.Check else Icons.Rounded.Alarm,
-                        contentDescription = null,
-                        tint = if (task.alarm) Palette.Lavender else Palette.TextSecondary,
-                    )
-                },
-                text = {
-                    Column {
-                        Text("Ring like an alarm", color = Palette.TextPrimary)
-                        Text("Full screen, with sound until you stop it", style = MaterialTheme.typography.labelSmall, color = Palette.TextSecondary)
-                    }
-                },
-                onClick = {
-                    open = false
-                    repo.update(task.id) { it.copy(alarm = !task.alarm, reminder = it.reminder ?: 0) }
-                    onReminderSet()
-                },
-            )
-        }
-    }
-}
 
-/**
- * When to start: its own reminder ("Time to start"), apart from the deadline reminder, so a
- * big task gets begun the day before instead of remembered an hour before it's due.
- */
-@Composable
-private fun StartRow(task: TaskItem, repo: Repository, today: LocalDate, onReminderSet: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    var pick by remember { mutableStateOf(false) }
-    val now = LocalDateTime.now()
-    val at = task.startAt
-    fun set(value: LocalDateTime?) {
-        repo.setStart(task.id, value)
-        if (value != null) onReminderSet()
-    }
-    Box {
-        PropertyRow(
-            icon = Icons.Rounded.PlayCircle,
-            label = "Start",
-            value = when {
-                at == null -> "No start reminder"
-                at.isBefore(now) && !task.done -> StartReminders.label(at, today) + ", passed"
-                else -> StartReminders.label(at, today)
-            },
-            active = at != null,
-            onClick = { open = true },
-            onClear = if (at != null) ({ set(null) }) else null,
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Palette.SurfaceHigh) {
-            Text(
-                "Remind me to start",
-                style = MaterialTheme.typography.labelMedium,
-                color = Palette.TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-            StartReminders.choices(task.date, task.time, now).forEach { choice ->
-                DropdownMenuItem(
-                    text = { StartChoiceText(choice, today) },
-                    onClick = {
-                        open = false
-                        set(choice.at)
-                    },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("Pick a day and time", color = Palette.TextPrimary) },
-                onClick = {
-                    open = false
-                    pick = true
-                },
-            )
-            if (at != null) {
-                DropdownMenuItem(
-                    text = { Text("No start reminder", color = Palette.TextPrimary) },
-                    onClick = {
-                        open = false
-                        set(null)
-                    },
-                )
-            }
-        }
-    }
-    if (pick) {
-        StartPickerDialog(
-            initial = at?.takeIf { it.isAfter(now) },
-            dueDate = task.date,
-            dueTime = task.time,
-            today = today,
-            onDismiss = { pick = false },
-            onPick = {
-                pick = false
-                set(it)
-            },
-        )
-    }
-}
 
 @Composable
 private fun ListRow(task: TaskItem, snapshot: Snapshot, repo: Repository) {
