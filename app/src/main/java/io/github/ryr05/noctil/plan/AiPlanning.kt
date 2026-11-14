@@ -118,7 +118,7 @@ class GeminiPlanner {
                 responseSchema = SCHEMA
             },
             systemInstruction = content { text(SYSTEM) },
-            requestOptions = RequestOptions(timeoutInMillis = 20_000),
+            requestOptions = RequestOptions(timeoutInMillis = 45_000),
         )
     }
 
@@ -175,8 +175,10 @@ class GeminiPlanner {
             - Ask at most one short question at a time, and only when you can't plan without it: how much time they have now,
               or how long a big task will take. With a question, use action "ask" and give 2 to 5 short options the student can tap.
             - As soon as you know how much time they have, use action "plan" (even in the same reply that adds new tasks) and fill
-              minutes_available (use -1 for the rest of the day), lengths for tasks whose length you learned, and favored_ids
-              for tasks the student said matter more.
+              minutes_available (use -1 for the rest of the day).
+            - Whenever the student says how long a task takes ("the lab report takes an hour", "problem set 45 min"), always put it
+              in lengths as {id, minutes} using that task's id from picked_tasks. Whenever they say a task matters more or should
+              come first, put its id in favored_ids. Leave these lists empty only when the student said nothing about them.
             - Use action "add_tasks" only when you added tasks but still need to ask how much time they have; then ask it in reply
               and offer options.
             - Good order: overdue and due soon first, study time before exams, high priority first, quick wins when time is short.
@@ -190,15 +192,18 @@ class GeminiPlanner {
 
         private val SCHEMA = Schema.obj(
             properties = mapOf(
-                "reply" to Schema.string(),
+                "reply" to Schema.string(description = "1 to 3 short sentences to the student"),
                 "action" to Schema.enumeration(listOf("chat", "ask", "add_tasks", "plan", "remind")),
-                "options" to Schema.array(Schema.string()),
-                "new_tasks" to Schema.array(Schema.string()),
-                "minutes_available" to Schema.integer(),
-                "lengths" to Schema.array(Schema.obj(mapOf("id" to Schema.long(), "minutes" to Schema.integer()))),
-                "favored_ids" to Schema.array(Schema.long()),
+                "options" to Schema.array(Schema.string(), description = "2 to 5 short tap-able answers when action is ask"),
+                "new_tasks" to Schema.array(Schema.string(), description = "New tasks the student mentioned, quick-add style, one per item"),
+                "minutes_available" to Schema.integer(description = "Free minutes right now, -1 for the rest of the day"),
+                "lengths" to Schema.array(
+                    Schema.obj(mapOf("id" to Schema.long(), "minutes" to Schema.integer())),
+                    description = "How long tasks take, by task id, whenever the student said so",
+                ),
+                "favored_ids" to Schema.array(Schema.long(), description = "Ids of tasks the student said matter more or come first"),
             ),
-            optionalProperties = listOf("options", "new_tasks", "minutes_available", "lengths", "favored_ids"),
+            optionalProperties = listOf("options", "new_tasks", "minutes_available"),
         )
     }
 }

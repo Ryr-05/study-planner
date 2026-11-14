@@ -153,6 +153,9 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.ai)
+    // App Check: Play Integrity in the real app, a debug token on emulators (debug builds only).
+    implementation(libs.firebase.appcheck.playintegrity)
+    debugImplementation(libs.firebase.appcheck.debug)
     implementation(libs.credentials)
     implementation(libs.credentials.play)
     implementation(libs.googleid)

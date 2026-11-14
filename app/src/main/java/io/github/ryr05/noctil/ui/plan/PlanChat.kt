@@ -279,15 +279,19 @@ class PlanSession(private val context: Context) {
         val plan = Planner.plan(tasks, answers, now, snapshot.classes)
         lastPlan = plan
         phase = Phase.Done
-        val work = plan.work.distinctBy { it.taskId }.size
-        messages += ChatMessage.Bot(
-            aiText ?: when {
-                work == 0 -> "Nothing fits in that time. Try more time, or pick shorter tasks."
-                plan.later.isEmpty() -> "Here's your plan. Start with the first one and I'll keep the rest in order."
-                else -> "Here's what fits. The rest stays on your list for later."
-            },
-        )
+        // Written from the plan itself, so the words always match the order shown.
+        messages += ChatMessage.Bot(summary(plan))
         messages += ChatMessage.Result(plan, now)
+    }
+
+    private fun summary(plan: Planner.Plan): String {
+        val work = plan.work.distinctBy { it.taskId }
+        if (work.isEmpty()) return "Nothing fits in that time. Try more time, or pick shorter tasks."
+        val first = work.first()
+        val parts = mutableListOf("Start with ${first.title} (${first.reason.replaceFirstChar { it.lowercase() }}).")
+        if (work.size > 1) parts += "Then " + work.drop(1).joinToString(", then ") { it.title } + "."
+        if (plan.later.isNotEmpty()) parts += "The rest stays on your list for later."
+        return parts.joinToString(" ")
     }
 
     /** One turn with Gemini. Any failure falls back to the offline planner for this chat. */
@@ -306,7 +310,7 @@ class PlanSession(private val context: Context) {
         AiPlanning.countOne(context)
         scope.launch {
             val reply = runCatching {
-                withTimeout(25_000) { withContext(Dispatchers.IO) { gemini.send(text, tasks(snapshot), answers, LocalDateTime.now()) } }
+                withTimeout(50_000) { withContext(Dispatchers.IO) { gemini.send(text, tasks(snapshot), answers, LocalDateTime.now()) } }
             }
             // Tasks Gemini picked out of the message are added first, so the plan can include them.
             val added = reply.getOrNull()?.newTasks?.takeIf { it.isNotEmpty() }?.let { lines ->
@@ -316,6 +320,12 @@ class PlanSession(private val context: Context) {
             reply.onSuccess { apply(it, repo.snapshot.value, added) }.onFailure { e ->
                 android.util.Log.w("NoctilAI", "Gemini request failed: ${e.javaClass.simpleName}")
                 ai = false
+                // Keep what the student already said, like "I have 2 hours".
+                if (answers.minutesAvailable == null) {
+                    typedAnswer(Planner.Question("time", "", emptyList()), text)?.first?.toIntOrNull()?.let {
+                        answers = answers.copy(minutesAvailable = it, asked = answers.asked + "time")
+                    }
+                }
                 messages += ChatMessage.Bot(
                     "I couldn't reach Gemini just now, so I'll plan on your phone. " +
                         if (selected.isEmpty()) "Type your tasks one per line, or pick some above." else "",
@@ -562,6 +572,11 @@ private fun AiSwitch(session: PlanSession) {
 
 @Composable
 private fun ThinkingBubble() {
+    var slow by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(8_000)
+        slow = true
+    }
     val transition = rememberInfiniteTransition(label = "thinking")
     val alpha by transition.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dots")
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -572,7 +587,11 @@ private fun ThinkingBubble() {
             Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Palette.Lavender.copy(alpha = alpha), modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.width(10.dp))
-        Text("Thinking...", style = MaterialTheme.typography.bodyMedium, color = Palette.TextSecondary.copy(alpha = alpha))
+        Text(
+            if (slow) "Still thinking. The free AI can be slow sometimes..." else "Thinking...",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Palette.TextSecondary.copy(alpha = alpha),
+        )
     }
 }
 

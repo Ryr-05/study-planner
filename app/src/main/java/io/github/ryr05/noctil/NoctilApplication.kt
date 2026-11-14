@@ -25,6 +25,8 @@ class NoctilApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Before any Firebase call: proves requests come from the real Noctil on a real phone.
+        if (BuildConfig.CLOUD_SYNC) runCatching { AppCheckSetup.install(this) }
         Notifications.createChannel(this)
         io.github.ryr05.noctil.reminders.AlarmService.createChannel(this)
         LockscreenCard.createChannel(this)
