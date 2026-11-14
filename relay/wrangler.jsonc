@@ -1,0 +1,16 @@
+// Noctil AI relay: a free Cloudflare Worker that holds the AI keys so the app never does.
+// Deploy: npx wrangler deploy. The Groq key is a secret: npx wrangler secret put GROQ_API_KEY
+{
+  "name": "noctil-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "ai": { "binding": "AI" },
+  "vars": {
+    // "true" turns away requests that don't prove they come from the real app (Firebase App Check).
+    // Starts in monitor mode, like Firebase, so testing on an emulator still works.
+    "REQUIRE_APP_CHECK": "false",
+    // Public number of the Firebase project (it's inside the app too), used to check App Check tokens.
+    "FIREBASE_PROJECT_NUMBER": "850626446328"
+  },
+  "observability": { "enabled": false }
+}

@@ -34,6 +34,7 @@ class NoctilApplication : Application() {
         repository = Repository(this, NoctilDatabase.build(this), scheduler)
         FocusEngine.init(this)
         io.github.ryr05.noctil.plan.TodayPlan.init(this)
+        if (BuildConfig.DEBUG) io.github.ryr05.noctil.plan.AiRelay.forceInDebug = java.io.File(filesDir, "force_relay").exists()
         CloudSync.init(this)
 
         // Keep widgets and the lockscreen card in step with the data.

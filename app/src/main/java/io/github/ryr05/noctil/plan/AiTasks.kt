@@ -48,7 +48,15 @@ class GeminiTaskReader {
     suspend fun read(text: String, now: LocalDateTime, tags: List<String>): AiRead {
         val prompt = "now: ${now.format(DateTimeFormatter.ofPattern("EEEE yyyy-MM-dd HH:mm"))}\n" +
             "existing_tags: ${tags.take(40).joinToString(", ")}\n\nTEXT:\n${text.take(MAX_CHARS)}"
-        val raw = model.generateContent(prompt).text ?: error("Empty reply")
+        val raw = runCatching { model.generateContent(prompt).text ?: error("Empty reply") }.recoverCatching { e ->
+            if (!AiRelay.available) throw e
+            AiRelay.chat(
+                listOf(
+                    "system" to SYSTEM + "\n\nReply with only one JSON object: {\"tasks\": [string], \"note\": string}.",
+                    "user" to prompt,
+                ),
+            )
+        }.getOrThrow()
         if (BuildConfig.DEBUG) android.util.Log.d("NoctilAI", "read: $raw")
         return AiRead.parse(raw)
     }

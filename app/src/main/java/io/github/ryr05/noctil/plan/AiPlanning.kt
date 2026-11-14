@@ -134,12 +134,19 @@ data class AiContext(
  */
 class GeminiAssistant(earlier: List<Pair<Boolean, String>> = emptyList()) {
     private val history = mutableListOf<Content>()
+    // The same conversation in plain (role, text) form, for the backup AI.
+    private val plain = mutableListOf<Pair<String, String>>()
+
+    /** "gemini" or "backup": which AI answered last. */
+    var lastProvider = "gemini"
+        private set
 
     init {
         // A saved chat comes back as plain lines; the model sees them as its own earlier replies.
         earlier.takeLast(MAX_HISTORY).forEach { (fromStudent, text) ->
-            history += if (fromStudent) content(role = "user") { text("Student: $text") }
-            else content(role = "model") { text(JSONObject().put("reply", text).put("action", "chat").toString()) }
+            val asModel = JSONObject().put("reply", text).put("action", "chat").toString()
+            history += if (fromStudent) content(role = "user") { text("Student: $text") } else content(role = "model") { text(asModel) }
+            plain += if (fromStudent) "user" to "Student: $text" else "assistant" to asModel
         }
     }
 
@@ -158,14 +165,25 @@ class GeminiAssistant(earlier: List<Pair<Boolean, String>> = emptyList()) {
 
     /** Sends one message. Throws if Gemini can't be reached, so the caller can fall back to offline. */
     suspend fun send(message: String, ctx: AiContext, now: LocalDateTime): AiReply {
-        val turn = content(role = "user") { text("${contextBlock(ctx, now)}\n\nStudent: $message") }
-        val response = model.generateContent(history + turn)
-        val raw = response.text ?: error("Empty reply")
+        val prompt = "${contextBlock(ctx, now)}\n\nStudent: $message"
+        // Gemini first; if it's out of free messages or down, the backup AI on Noctil's relay.
+        val raw = runCatching {
+            if (BuildConfig.DEBUG && AiRelay.forceInDebug) error("Testing the backup AI")
+            val turn = content(role = "user") { text(prompt) }
+            model.generateContent(history + turn).text ?: error("Empty reply")
+        }.onSuccess { lastProvider = "gemini" }.recoverCatching { e ->
+            if (!AiRelay.available) throw e
+            android.util.Log.w("NoctilAI", "Gemini failed (${e.javaClass.simpleName}), using the backup AI")
+            AiRelay.chat(listOf("system" to SYSTEM + RELAY_FORMAT) + plain + ("user" to prompt)).also { lastProvider = "backup" }
+        }.getOrThrow()
         if (BuildConfig.DEBUG) android.util.Log.d("NoctilAI", "reply: $raw")
         val reply = AiReply.parse(raw)
         history += content(role = "user") { text("Student: $message") }
         history += content(role = "model") { text(raw) }
+        plain += "user" to "Student: $message"
+        plain += "assistant" to raw
         while (history.size > MAX_HISTORY) history.removeAt(0)
+        while (plain.size > MAX_HISTORY) plain.removeAt(0)
         return reply
     }
 
@@ -246,6 +264,19 @@ class GeminiAssistant(earlier: List<Pair<Boolean, String>> = emptyList()) {
 
     companion object {
         private const val MAX_HISTORY = 12
+
+        /** Gemini gets the format as a schema; other models get it in words. */
+        private val RELAY_FORMAT = """
+
+            Reply with only one JSON object, no other text, with these fields:
+            {"reply": string, "action": one of "chat","ask","add_tasks","plan","remind","change","plan_week","add_habits",
+             "options": [string] (only for ask), "new_tasks": [string], "minutes_available": integer (optional),
+             "lengths": [{"id": number, "minutes": integer}], "favored_ids": [number], "plan_task_ids": [number],
+             "changes": [{"id": number, "start": "YYYY-MM-DDTHH:MM" or "none", "due_date": "YYYY-MM-DD", "due_time": "HH:MM",
+                          "title": string, "priority": "high"|"medium"|"low"|"none", "tags_add": [string], "list": string, "done": boolean}],
+             "new_habits": [{"name": string, "goal": integer, "days": [string], "reminder": "HH:MM" or ""}]}
+            Leave out fields you don't need, but always include reply, action, lengths and favored_ids (empty lists are fine).
+        """.trimIndent()
 
         private val SYSTEM = """
             You are Noctil AI, the assistant inside Noctil, a planner app for college students.
