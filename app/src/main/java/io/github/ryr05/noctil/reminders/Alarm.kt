@@ -190,13 +190,20 @@ class AlarmService : Service() {
         stopEverything()
     }
 
+    /**
+     * Android only opens a full-screen page when a notification is first posted, never when an
+     * existing one is updated. So the quick placeholder and the real alarm use different ids:
+     * the real one is always a fresh post, and each removes the other.
+     */
     private fun goForeground(r: Ringing, full: Boolean) {
+        val id = if (full) NOTIFICATION_ID else PLACEHOLDER_ID
         val notification = buildNotification(r, full)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
-            startForeground(NOTIFICATION_ID, notification)
+            startForeground(id, notification)
         }
+        getSystemService(NotificationManager::class.java).cancel(if (full) PLACEHOLDER_ID else NOTIFICATION_ID)
     }
 
     /** [full] posts the full-screen page too; the first quick placeholder doesn't, to avoid a flash. */
@@ -216,6 +223,10 @@ class AlarmService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setContentIntent(screen)
+            // Its own group, so Android never bundles it with the Today card. A bundled
+            // notification is silenced and its full-screen page never opens.
+            .setGroup(GROUP)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_ALL)
         if (!full) return builder.build()
         builder.setFullScreenIntent(screen, true)
         if (r.taskId >= 0) {
@@ -310,6 +321,8 @@ class AlarmService : Service() {
     companion object {
         const val CHANNEL_ID = "alarms"
         private const val NOTIFICATION_ID = 7_400
+        private const val PLACEHOLDER_ID = 7_401
+        private const val GROUP = "noctil_alarm"
         private const val NO_TASK = -2L
         /** A test ring from settings, not tied to a task. */
         const val PREVIEW = -1L
