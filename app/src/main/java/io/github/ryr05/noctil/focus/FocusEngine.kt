@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import io.github.ryr05.noctil.Launch
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.R
+import io.github.ryr05.noctil.plan.TodayPlan
 import io.github.ryr05.noctil.reminders.Notifications
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +68,31 @@ object FocusEngine {
     private const val DONE_ID = 7_000_003
     const val ACTION_PAUSE = "io.github.ryr05.noctil.focus.PAUSE"
     const val ACTION_STOP = "io.github.ryr05.noctil.focus.STOP"
+    const val ACTION_CHECKIN_DONE = "io.github.ryr05.noctil.focus.CHECKIN_DONE"
+    const val ACTION_CHECKIN_MORE = "io.github.ryr05.noctil.focus.CHECKIN_MORE"
+
+    /**
+     * The answer to "Done, or more time?": ticks the task off or starts extra focus on it, and
+     * shifts the rest of today's plan.
+     */
+    fun checkIn(context: Context, answer: TodayPlan.Answer) {
+        val taskId = TodayPlan.state.value?.checkInTaskId ?: TodayPlan.state.value?.next?.taskId ?: return
+        NotificationManagerCompat.from(context).cancel(DONE_ID)
+        TodayPlan.answer(context, answer)
+        when (answer) {
+            TodayPlan.Answer.Done -> {
+                val app = context.applicationContext as NoctilApplication
+                app.repository.setDone(taskId, true)
+            }
+            is TodayPlan.Answer.More -> {
+                select(context, FocusKind.Focus)
+                setMinutes(context, answer.minutes)
+                setTask(context, taskId)
+                start(context)
+            }
+            TodayPlan.Answer.NotToday -> Unit
+        }
+    }
     private const val ACTION_END = "io.github.ryr05.noctil.focus.END"
 
     private val _state = MutableStateFlow(FocusState())
@@ -153,6 +179,8 @@ object FocusEngine {
         FocusService.stop(context)
         val finishedFocus = s.kind == FocusKind.Focus
         if (finishedFocus) record(context, s.startedAt.takeIf { it > 0 } ?: (System.currentTimeMillis() - s.minutes * 60_000L), s.minutes, s.taskId, "focus")
+        // A planned block ended: ask "Done, or more time?" (in Focus and on the notification).
+        if (finishedFocus && s.taskId != null) TodayPlan.onFocusFinished(context, s.taskId)
         val streak = if (finishedFocus) s.streak + 1 else s.streak
         val nextKind = when {
             !finishedFocus -> FocusKind.Focus
@@ -237,6 +265,24 @@ object FocusEngine {
     @SuppressLint("MissingPermission")
     private fun notifyDone(context: Context, finishedFocus: Boolean, next: FocusKind) {
         if (!Notifications.canNotify(context)) return
+        val checkIn = TodayPlan.state.value?.checkInTaskId?.takeIf { finishedFocus }
+        if (checkIn != null) {
+            val title = TodayPlan.state.value?.blocks?.firstOrNull { it.taskId == checkIn }?.title?.substringBefore(" (") ?: "your task"
+            val n = NotificationCompat.Builder(context, DONE_CHANNEL)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(0xFFB9A3FF.toInt())
+                .setContentTitle("Time's up: $title")
+                .setContentText("Done, or do you need more time? The rest of your plan adjusts.")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setGroup("noctil_checkin").setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_ALL)
+                .setContentIntent(Launch.pending(context, Launch.focus(context), 9_201))
+                .addAction(0, "Done", actionIntent(context, ACTION_CHECKIN_DONE))
+                .addAction(0, "+10 min", actionIntent(context, ACTION_CHECKIN_MORE))
+                .build()
+            NotificationManagerCompat.from(context).notify(DONE_ID, n)
+            return
+        }
         val notification = NotificationCompat.Builder(context, DONE_CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFB9A3FF.toInt())
@@ -315,6 +361,8 @@ class FocusReceiver : BroadcastReceiver() {
         when (intent.action) {
             FocusEngine.ACTION_PAUSE -> FocusEngine.pause(context)
             FocusEngine.ACTION_STOP -> FocusEngine.reset(context)
+            FocusEngine.ACTION_CHECKIN_DONE -> FocusEngine.checkIn(context, TodayPlan.Answer.Done)
+            FocusEngine.ACTION_CHECKIN_MORE -> FocusEngine.checkIn(context, TodayPlan.Answer.More(10))
             else -> FocusEngine.complete(context)
         }
     }

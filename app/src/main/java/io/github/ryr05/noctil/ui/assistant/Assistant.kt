@@ -105,13 +105,13 @@ fun AssistantScreen(
     onFocusStarted: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(top = topContentPadding(), start = 20.dp, end = 20.dp)) {
-        if (session == null) ChatList(onNewChat, onOpenChat, onOpenMe)
+        if (session == null) ChatList(onNewChat, onOpenChat, onOpenMe, onFocusStarted)
         else ChatView(session, snapshot, today, onCloseChat, onFocusStarted)
     }
 }
 
 @Composable
-private fun ColumnScope.ChatList(onNewChat: () -> Unit, onOpenChat: (String) -> Unit, onOpenMe: () -> Unit) {
+private fun ColumnScope.ChatList(onNewChat: () -> Unit, onOpenChat: (String) -> Unit, onOpenMe: () -> Unit, onFocusStarted: () -> Unit) {
     val context = LocalContext.current
     var refresh by remember { mutableStateOf(0) }
     var chats by remember { mutableStateOf<List<ChatStore.Chat>>(emptyList()) }
@@ -126,6 +126,7 @@ private fun ColumnScope.ChatList(onNewChat: () -> Unit, onOpenChat: (String) -> 
         AiPlanning.setEnabled(context, on)
         aiOn = AiPlanning.status(context) == AiPlanning.Status.Ready
     }
+    io.github.ryr05.noctil.ui.components.TodayPlanCard(Modifier.padding(top = 14.dp), onStarted = onFocusStarted)
     Spacer(Modifier.height(16.dp))
     PrimaryButton("New chat", enabled = true, onClick = onNewChat)
     Spacer(Modifier.height(20.dp))
@@ -335,6 +336,7 @@ private fun ColumnScope.ChatView(session: AssistantSession, snapshot: Snapshot, 
                     }
                     is ChatMessage.ConfirmDeadline -> DeadlineCard(msg, today) { change -> session.answerDeadline(i, change) }
                     is ChatMessage.WeekPlan -> WeekPlanCard(msg, today) { apply -> session.answerWeekPlan(i, apply) }
+                    is ChatMessage.Setup -> SetupCard(session, msg, i, snapshot, today)
                 }
             }
         }
@@ -346,6 +348,55 @@ private fun ColumnScope.ChatView(session: AssistantSession, snapshot: Snapshot, 
         InputBar(
             hint = if (session.ai) "Message Noctil AI" else "Ask, or type tasks one per line",
             onSend = { session.send(it, snapshot) },
+        )
+    }
+}
+
+/**
+ * Setting up a new task: "When would you like to begin?", then subject, priority and (for big
+ * tasks) "keep at it" nudges. One tap each, and "Skip, use suggestions" is always there.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SetupCard(session: AssistantSession, msg: ChatMessage.Setup, index: Int, snapshot: Snapshot, today: LocalDate) {
+    var picking by remember { mutableStateOf(false) }
+    if (msg.step == null) {
+        BotBubble("All set for ${msg.title}" + if (msg.notes.isEmpty()) "." else ": " + msg.notes.joinToString(", ") + ".")
+        return
+    }
+    Column {
+        BotBubble(session.setupQuestion(msg))
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            session.setupOptions(msg, snapshot).forEach { (label, value) ->
+                Pill(label, selected = false) {
+                    if (value == "pick") picking = true else session.answerSetup(index, value, label)
+                }
+            }
+        }
+        Text(
+            "Skip, use suggestions",
+            style = MaterialTheme.typography.labelMedium,
+            color = Palette.TextSecondary,
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button) { session.answerSetup(index, "skip", "") }
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+        )
+    }
+    if (picking) {
+        val task = snapshot.byId[msg.taskId]
+        io.github.ryr05.noctil.ui.components.StartPickerDialog(
+            initial = null,
+            dueDate = task?.date,
+            dueTime = task?.time,
+            today = today,
+            onDismiss = { picking = false },
+            onPick = {
+                picking = false
+                session.answerSetupStart(index, it)
+            },
         )
     }
 }

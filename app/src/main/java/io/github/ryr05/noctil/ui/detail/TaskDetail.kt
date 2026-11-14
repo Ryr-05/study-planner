@@ -467,6 +467,7 @@ private fun remindersText(task: TaskItem, now: LocalDateTime): String {
     val parts = buildList {
         if (task.startAt?.isAfter(now) == true) add("At start")
         if (task.date != null) dueReminderText(task.reminder, task.time != null)?.let { add(it) }
+        if (task.date != null && task.keepEvery > 0) add(if (task.keepEvery == 1) "daily nudge" else "every ${task.keepEvery} days")
     }
     if (parts.isEmpty()) return "None"
     val extras = listOfNotNull(if (task.alarm && task.reminder != null) "rings" else null, if (task.nag && task.reminder != null) "repeats" else null)
@@ -551,6 +552,31 @@ private fun RemindersDialog(
                                 ChoicePill(label, selected = task.reminder == m) {
                                     repo.update(task.id) { it.copy(reminder = m) }
                                     if (m != null) onReminderSet()
+                                }
+                            }
+                        }
+                    }
+                }
+                // Keep at it: repeating nudges from the start until it's due.
+                if (task.date != null) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Repeat, contentDescription = null, tint = Palette.Lavender, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Keep at it", style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary)
+                                Text("A nudge to keep working on it until it's due", style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
+                            }
+                        }
+                        FlowRow(
+                            modifier = Modifier.padding(start = 30.dp, top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(0 to "Off", 1 to "Every day", 2 to "Every other day").forEach { (days, label) ->
+                                ChoicePill(label, selected = task.keepEvery == days) {
+                                    repo.setKeepAtIt(task.id, days)
+                                    if (days > 0) onReminderSet()
                                 }
                             }
                         }

@@ -42,6 +42,8 @@ data class TaskItem(
     val alarm: Boolean = false,
     /** When the student plans to start it. Reminds them then, apart from the deadline reminder. */
     val startAt: LocalDateTime? = null,
+    /** "Keep at it": nudges every N days until due. 0 is off. */
+    val keepEvery: Int = 0,
 ) {
     /** Minutes the task takes up on the calendar. */
     val blockMinutes: Int get() = durationMinutes ?: DEFAULT_TASK_MINUTES

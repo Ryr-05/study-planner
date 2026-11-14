@@ -47,4 +47,17 @@ class StartRemindersTest {
         assertTrue(StartReminders.label(d(12).atTime(19, 0), today, Locale.US).startsWith("Thu "))
         assertTrue(StartReminders.label(d(25).atTime(19, 0), today, Locale.US).startsWith("Nov 25, "))
     }
+
+    @Test fun keepAtItNudgesEveryNDaysUntilDue() {
+        val start = d(11).atTime(19, 0)
+        // Every day: the day after the start, at the start's time.
+        assertEquals(d(12).atTime(19, 0), StartReminders.nextKeep(1, start, d(14), LocalTime.of(23, 59), now))
+        // Every other day.
+        assertEquals(d(13).atTime(19, 0), StartReminders.nextKeep(2, start, d(16), null, now))
+        // Nothing left before the deadline, or switched off.
+        assertNull(StartReminders.nextKeep(1, start, d(12), LocalTime.of(9, 0), now))
+        assertNull(StartReminders.nextKeep(0, start, d(14), null, now))
+        // Without a start, from today on.
+        assertEquals(d(11).atTime(19, 0), StartReminders.nextKeep(1, null, d(14), null, now))
+    }
 }

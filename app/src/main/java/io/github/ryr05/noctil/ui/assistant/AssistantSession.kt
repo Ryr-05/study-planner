@@ -69,7 +69,11 @@ sealed interface ChatMessage {
     data class ConfirmDeadline(val edits: List<AiChangeGuard.DeadlineEdit>, val answer: Boolean? = null) : ChatMessage
     /** Start times for the week, waiting for the student's OK. */
     data class WeekPlan(val slots: List<WeekPlanner.Slot>, val answer: Boolean? = null) : ChatMessage
+    /** Setting up a new task, one tap-able question at a time. [step] is null once it's all set. */
+    data class Setup(val taskId: Long, val title: String, val step: SetupStep?, val notes: List<String> = emptyList()) : ChatMessage
 }
+
+enum class SetupStep { Begin, Subject, Priority, Keep }
 
 /**
  * One Noctil AI conversation. With AI on, Gemini reads the message and the app carries out what
@@ -102,6 +106,8 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
     // What the AI was last shown and asked, for the app's own checks on what it suggests.
     private var lastKnown: Map<Long, TaskItem> = emptyMap()
     private var lastStudentMessage = ""
+    // New tasks still waiting for their setup questions.
+    private val setupQueue = ArrayDeque<Long>()
     // Text the offline assistant wasn't sure about, kept for "Add it as a task".
     private var pendingText = ""
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -320,6 +326,8 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
         }
         val plan = Planner.plan(tasks, answers, now, snapshot.classes)
         lastPlan = plan
+        // Saved as today's plan, so it stays in Focus and on the Noctil AI tab after the chat closes.
+        io.github.ryr05.noctil.plan.TodayPlan.save(context, plan)
         phase = Phase.Done
         // Written from the plan itself, so the words always match the order shown.
         messages += ChatMessage.Bot(summary(plan))
@@ -395,7 +403,8 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
             }
             "add_habits" -> if (r.newHabits.isEmpty()) messages += ChatMessage.Bot(r.reply) else addHabits(r.newHabits, snapshot)
             "add_tasks", "ask" -> if (r.options.isEmpty()) {
-                messages += ChatMessage.Bot(r.reply)
+                // "Added to your tasks" already said it; the AI's own "I have added..." would repeat it.
+                if (!(r.action == "add_tasks" && added != null && added.labels.isNotEmpty())) messages += ChatMessage.Bot(r.reply)
             } else {
                 asks++
                 messages += ChatMessage.Ask(Planner.Question("ai:$asks", r.reply, r.options.map { Planner.Option(it, it) }))
@@ -415,6 +424,8 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
         }
         if (r.action != "change" && r.action != "plan_week" && r.changes.isNotEmpty()) applyChanges(r.changes, expected = false, snapshot)
         if (r.action != "add_habits" && r.newHabits.isNotEmpty()) addHabits(r.newHabits, snapshot)
+        // New tasks get their setup questions (unless the student is in the middle of planning).
+        if (added != null && r.action != "plan") queueSetup(lastAdded)
     }
 
     /**
@@ -589,17 +600,147 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
         p.date?.let { append(" (").append(relativeDay(it, today)); p.time?.let { t -> append(", ").append(t.format(timeFormat)) }; append(")") }
     }
 
-    /** Adds each line as a task (parsed like quick add). Returns short labels. */
+    /** Adds each line as a task (parsed like quick add), then asks the setup questions. Returns short labels. */
     private fun addTasks(lines: List<String>): List<String> {
         val now = LocalDateTime.now()
-        return lines.map { it.trim() }.filter { it.isNotEmpty() }.map { line ->
+        val clean = lines.map { it.trim() }.filter { it.isNotEmpty() }
+        val ids = mutableListOf<Long>()
+        return clean.map { line ->
             val parsed = withSuggestedStart(SmartParser.parse(line, now), now)
-            repo.addTask(parsed, listId = null) { id -> selected = selected + id }
+            repo.addTask(parsed, listId = null) { id ->
+                selected = selected + id
+                ids += id
+                if (ids.size == clean.size) scope.launch { awaitTasks(ids); queueSetup(ids) }
+            }
             label(parsed, now.toLocalDate())
         }
     }
 
+    private suspend fun awaitTasks(ids: List<Long>) {
+        withTimeoutOrNull(3_000) { repo.snapshot.first { s -> ids.all { id -> s.tasks.any { it.id == id } } } }
+    }
+
+    // ---------- Setting up new tasks ----------
+
+    /** Asks the setup questions for a few new tasks; a long list (a syllabus) skips them. */
+    private fun queueSetup(ids: List<Long>) {
+        if (ids.isEmpty() || ids.size > 3) return
+        setupQueue.addAll(ids)
+        if (messages.none { it is ChatMessage.Setup && it.step != null }) nextSetup()
+    }
+
+    private fun nextSetup() {
+        val id = setupQueue.removeFirstOrNull() ?: return
+        val task = repo.snapshot.value.byId[id] ?: return nextSetup()
+        val step = firstStep(task, null) ?: return nextSetup()
+        messages += ChatMessage.Setup(id, task.title, step)
+    }
+
+    /** The next question worth asking, skipping what's already set (typed #chem, !1...). */
+    private fun firstStep(task: TaskItem, after: SetupStep?): SetupStep? {
+        val order = SetupStep.entries.dropWhile { after != null && it.ordinal <= after.ordinal }
+        return order.firstOrNull { step ->
+            when (step) {
+                SetupStep.Begin -> true
+                SetupStep.Subject -> task.tags.isEmpty() && (repo.snapshot.value.tags.isNotEmpty() || repo.snapshot.value.classes.isNotEmpty())
+                SetupStep.Priority -> task.priority == Priority.None
+                SetupStep.Keep -> task.date != null && !task.date.isBefore(LocalDate.now().plusDays(2)) && task.keepEvery == 0 &&
+                    StartReminders.sizeOf(task.title, task.tags.map { it.name }, task.priority, task.durationMinutes) == StartReminders.Size.Big
+            }
+        }
+    }
+
+    /** The answers offered for a setup question, as (label, value). */
+    fun setupOptions(m: ChatMessage.Setup, snapshot: Snapshot): List<Pair<String, String>> {
+        val task = snapshot.byId[m.taskId] ?: return emptyList()
+        val today = LocalDate.now()
+        return when (m.step) {
+            SetupStep.Begin -> buildList {
+                task.startAt?.takeIf { it.isAfter(LocalDateTime.now()) }?.let { add("${StartReminders.label(it, today)} (suggested)" to "keep") }
+                StartReminders.choices(task.date, task.time, LocalDateTime.now())
+                    .filter { it.at != task.startAt }
+                    .take(3)
+                    .forEach { c -> add((c.hint?.let { h -> "$h, " } ?: "") + StartReminders.label(c.at, today) to "at:${c.at}") }
+                add("Pick a day and time" to "pick")
+                add("No start" to "none")
+            }
+            SetupStep.Subject -> buildList {
+                // A subject from the task's own name first ("Chem lab report" offers #chem), then classes and tags.
+                val fromTitle = task.title.split(' ').firstOrNull { w -> w.length >= 3 && w.lowercase() !in SETUP_SKIP_WORDS }?.lowercase()
+                val names = (listOfNotNull(fromTitle) + snapshot.classes.map { it.name.split(' ').first().lowercase() } + snapshot.tags.map { it.name })
+                    .map { it.filter { c -> c.isLetterOrDigit() || c == '-' || c == '_' } }
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase() }
+                names.take(6).forEach { add("#$it" to "tag:$it") }
+                add("None" to "none")
+            }
+            SetupStep.Priority -> listOf("High" to "p:3", "Medium" to "p:2", "Low" to "p:1", "Not sure" to "p:0")
+            SetupStep.Keep -> listOf("Every day" to "keep:1", "Every other day" to "keep:2", "No thanks" to "keep:0")
+            null -> emptyList()
+        }
+    }
+
+    fun setupQuestion(m: ChatMessage.Setup): String = when (m.step) {
+        SetupStep.Begin -> "When would you like to begin with ${m.title}?"
+        SetupStep.Subject -> "Which subject is it for?"
+        SetupStep.Priority -> "How important is it?"
+        SetupStep.Keep -> "It's a big one. Want a nudge to keep at it until it's due?"
+        null -> ""
+    }
+
+    /** One tap on a setup answer: saves it and moves to the next question (or the next new task). */
+    fun answerSetup(index: Int, value: String, label: String) {
+        val m = messages.getOrNull(index) as? ChatMessage.Setup ?: return
+        val step = m.step ?: return
+        val id = m.taskId
+        var note: String? = null
+        when {
+            value == "skip" -> {
+                messages[index] = m.copy(step = null, notes = m.notes + "kept the suggestions")
+                nextSetup()
+                return
+            }
+            value == "keep" -> note = "start " + label.removeSuffix(" (suggested)")
+            value.startsWith("at:") -> runCatching { LocalDateTime.parse(value.removePrefix("at:")) }.getOrNull()?.let {
+                repo.setStart(id, it)
+                note = "start " + StartReminders.label(it, LocalDate.now())
+            }
+            value == "none" && step == SetupStep.Begin -> {
+                repo.setStart(id, null)
+                note = "no start"
+            }
+            value.startsWith("tag:") -> {
+                repo.addTag(id, value.removePrefix("tag:"))
+                note = "#" + value.removePrefix("tag:")
+            }
+            value.startsWith("p:") -> {
+                val p = Priority.of(value.removePrefix("p:").toInt())
+                repo.update(id) { it.copy(priority = p.value) }
+                if (p != Priority.None) note = p.label.lowercase() + " priority"
+            }
+            value.startsWith("keep:") -> {
+                val days = value.removePrefix("keep:").toInt()
+                repo.setKeepAtIt(id, days)
+                if (days > 0) note = if (days == 1) "nudge every day" else "nudge every other day"
+            }
+        }
+        val notes = m.notes + listOfNotNull(note)
+        // Ask the next question from fresh data, so it sees the tag or priority just set.
+        scope.launch {
+            withTimeoutOrNull(1_000) { repo.snapshot.first { s -> s.byId[id] != null } }
+            val task = repo.snapshot.value.byId[id]
+            val next = task?.let { firstStep(it, step) }
+            messages[index] = m.copy(step = next, notes = notes)
+            if (next == null) nextSetup()
+        }
+    }
+
+    /** A start picked from the full picker during setup. */
+    fun answerSetupStart(index: Int, at: LocalDateTime) =
+        answerSetup(index, "at:$at", StartReminders.label(at, LocalDate.now()))
+
     private class Added(val labels: List<String>, val ids: List<Long>)
+    private var lastAdded: List<Long> = emptyList()
 
     /** Adds tasks, picks them, and waits until they show up, so a plan can include them. */
     private suspend fun addTasksAwait(lines: List<String>): Added {
@@ -612,7 +753,8 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
         }
         val ids = pending.map { it.await() }
         selected = selected + ids
-        withTimeoutOrNull(3_000) { repo.snapshot.first { s -> ids.all { id -> s.tasks.any { it.id == id } } } }
+        awaitTasks(ids)
+        lastAdded = ids
         return Added(labels, ids)
     }
 
@@ -664,7 +806,7 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
     /** The chat as saved on the phone: cards become short notes. */
     fun toChat(): ChatStore.Chat {
         // Saved notes use real dates, since "tonight" means nothing when the chat is reread later.
-        val today = LocalDate.MIN
+        val today = LocalDate.of(1970, 1, 1)
         val lines = messages.mapNotNull { m ->
             when (m) {
                 is ChatMessage.Bot -> ChatStore.Line(ChatStore.Role.Bot, m.text)
@@ -687,6 +829,7 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
                     "Week plan: " + m.slots.joinToString("; ") { "${it.task.title} ${StartReminders.label(it.start, today)}" } +
                         if (m.answer == true) " (applied)" else " (not applied)",
                 )
+                is ChatMessage.Setup -> if (m.step == null) ChatStore.Line(ChatStore.Role.Note, "${m.title}: " + m.notes.joinToString(", ")) else null
                 ChatMessage.Starters, ChatMessage.PickTasks -> null
             }
         }
@@ -695,5 +838,6 @@ class AssistantSession(private val context: Context, saved: ChatStore.Chat? = nu
 
     companion object {
         const val NEW_TITLE = "New chat"
+        private val SETUP_SKIP_WORDS = setOf("read", "write", "study", "finish", "start", "review", "email", "call", "the", "my", "do", "make", "submit")
     }
 }

@@ -77,6 +77,8 @@ data class TaskEntity(
     val doDay: Long? = null,
     /** Minutes after midnight for [doDay]. */
     val doTime: Int? = null,
+    /** "Keep at it": a nudge every N days from the start until it's due. 0 is off. */
+    @ColumnInfo(defaultValue = "0") val keepEvery: Int = 0,
 )
 
 /** A custom board column, like "Doing" or "Review". */
@@ -202,7 +204,7 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): TaskEntity?
 
-    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND ((reminder IS NOT NULL AND dueDate IS NOT NULL) OR doDay IS NOT NULL)")
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND ((reminder IS NOT NULL AND dueDate IS NOT NULL) OR doDay IS NOT NULL OR keepEvery > 0)")
     suspend fun withReminders(): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 AND dueDate IS NOT NULL")
@@ -547,7 +549,7 @@ interface BoardDao {
         FocusSessionEntity::class, HabitEntity::class, HabitCheckEntity::class,
         SyncMapEntity::class, StageEntity::class, PlaceEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class NoctilDatabase : RoomDatabase() {
@@ -566,7 +568,7 @@ abstract class NoctilDatabase : RoomDatabase() {
     companion object {
         fun build(context: Context): NoctilDatabase =
             Room.databaseBuilder(context, NoctilDatabase::class.java, "noctil.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
     }
 }
@@ -622,6 +624,13 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
                 "`remoteId` TEXT NOT NULL, `hash` INTEGER NOT NULL, PRIMARY KEY(`tableName`, `localKey`))",
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_map_tableName_remoteId` ON `sync_map` (`tableName`, `remoteId`)")
+    }
+}
+
+/** Version 7 to 8: "keep at it" nudges for big tasks. Existing data is kept. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `keepEvery` INTEGER NOT NULL DEFAULT 0")
     }
 }
 

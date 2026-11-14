@@ -173,6 +173,9 @@ class Repository(
     /** Sets or clears when the student plans to start the task. Its own reminder, apart from the deadline. */
     fun setStart(id: Long, at: LocalDateTime?) = update(id) { it.withStart(at) }
 
+    /** "Keep at it": a nudge every [days] days until it's due (0 turns it off). */
+    fun setKeepAtIt(id: Long, days: Int) = update(id) { it.copy(keepEvery = days.coerceIn(0, 7)) }
+
     /**
      * Sets the deadline's day and time in one go. A first deadline gets the default reminder,
      * and a start that would now be after the deadline is dropped.
@@ -699,6 +702,7 @@ class Repository(
                 placeId = t.placeId,
                 alarm = t.alarm,
                 startAt = t.startAt(),
+                keepEvery = t.keepEvery,
             )
         }
         return Snapshot(

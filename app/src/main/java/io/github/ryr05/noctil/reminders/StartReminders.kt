@@ -39,6 +39,26 @@ object StartReminders {
     private const val ACTION_START = "io.github.ryr05.noctil.START_NUDGE"
     private const val ACTION_LATER = "io.github.ryr05.noctil.START_LATER"
     private const val ACTION_DONE = "io.github.ryr05.noctil.START_DONE"
+    private const val ACTION_KEEP = "io.github.ryr05.noctil.KEEP_NUDGE"
+
+    /**
+     * The next "keep at it" nudge: every [every] days after the start day, at the start's time,
+     * from now on and before the deadline. Null when it's off or there's nothing left before the deadline.
+     */
+    fun nextKeep(every: Int, start: LocalDateTime?, dueDate: LocalDate?, dueTime: LocalTime?, now: LocalDateTime): LocalDateTime? {
+        if (every <= 0 || dueDate == null) return null
+        val deadline = dueDate.atTime(dueTime ?: LocalTime.MAX)
+        val base = start?.toLocalDate() ?: now.toLocalDate()
+        val time = start?.toLocalTime() ?: EVENING
+        for (i in 0L..400L) {
+            val day = now.toLocalDate().plusDays(i)
+            val at = day.atTime(time)
+            if (!at.isBefore(deadline)) return null
+            if (!day.isAfter(base) || java.time.temporal.ChronoUnit.DAYS.between(base, day) % every != 0L) continue
+            if (at.isAfter(now)) return at
+        }
+        return null
+    }
 
     /** The time a suggested start lands on, the evening before the deadline. */
     val EVENING: LocalTime = LocalTime.of(19, 0)
@@ -156,27 +176,36 @@ object StartReminders {
     fun schedule(context: Context, task: TaskEntity) {
         cancel(context, task.id)
         if (task.done || task.deleted) return
-        val at = task.startAt() ?: return
+        val now = System.currentTimeMillis()
+        task.startAt()?.let { at -> setAlarm(context, task.id, ACTION_START, at, now) }
+        nextKeep(task.keepEvery, task.startAt(), task.localDate(), task.localTime(), LocalDateTime.now())
+            ?.let { at -> setAlarm(context, task.id, ACTION_KEEP, at, now) }
+    }
+
+    private fun setAlarm(context: Context, taskId: Long, action: String, at: LocalDateTime, now: Long) {
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        if (millis <= System.currentTimeMillis()) return
+        if (millis <= now) return
         val alarms = context.getSystemService(AlarmManager::class.java)
-        val pending = pendingIntent(context, task.id, create = true) ?: return
+        val pending = pendingIntent(context, taskId, create = true, action) ?: return
         val exact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarms.canScheduleExactAlarms() else true
         if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
         else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
     }
 
     fun cancel(context: Context, taskId: Long) {
-        pendingIntent(context, taskId, create = false)?.let {
-            context.getSystemService(AlarmManager::class.java).cancel(it)
-            it.cancel()
+        listOf(ACTION_START, ACTION_KEEP).forEach { action ->
+            pendingIntent(context, taskId, create = false, action)?.let {
+                context.getSystemService(AlarmManager::class.java).cancel(it)
+                it.cancel()
+            }
         }
     }
 
-    private fun pendingIntent(context: Context, taskId: Long, create: Boolean): PendingIntent? {
+    private fun pendingIntent(context: Context, taskId: Long, create: Boolean, action: String = ACTION_START): PendingIntent? {
+        val kind = if (action == ACTION_KEEP) "keep" else "start"
         val intent = Intent(context, StartReminderReceiver::class.java)
-            .setAction(ACTION_START)
-            .setData("noctil://start/$taskId".toUri())
+            .setAction(action)
+            .setData("noctil://$kind/$taskId".toUri())
             .putExtra(EXTRA_TASK_ID, taskId)
         val flags = PendingIntent.FLAG_IMMUTABLE or if (create) PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_NO_CREATE
         return PendingIntent.getBroadcast(context, 0, intent, flags)
@@ -219,6 +248,30 @@ object StartReminders {
         return if (deadline == null || tomorrow.isBefore(deadline)) "Tomorrow" to tomorrow else "In 1 hour" to now.plusHours(1)
     }
 
+    /** "Keep going: Lab report", for big tasks you asked to be nudged about until they're due. */
+    @SuppressLint("MissingPermission")
+    internal fun showKeep(context: Context, task: TaskEntity) {
+        if (!Notifications.canNotify(context)) return
+        val id = task.id
+        val nid = 0x5000_0000 + id.toInt()
+        val focus = Launch.pending(context, Launch.focus(context, startNext = true).putExtra(Launch.EXTRA_FOCUS_TASK, id), nid + 1)
+        val every = if (task.keepEvery == 1) "every day" else "every ${task.keepEvery} days"
+        val notification = NotificationCompat.Builder(context, Notifications.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFFB9A3FF.toInt())
+            .setContentTitle("Keep going: ${task.title}")
+            .setContentText("${dueText(task)}. You asked for a nudge $every.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .ownGroup("keep_$id")
+            .setContentIntent(Launch.pending(context, Launch.openTask(context, id), nid))
+            .addAction(0, "Start focus", focus)
+            .addAction(0, "Done", action(context, ACTION_DONE, id))
+            .build()
+        NotificationManagerCompat.from(context).notify(nid, notification)
+    }
+
     @SuppressLint("MissingPermission")
     internal fun show(context: Context, task: TaskEntity) {
         if (!Notifications.canNotify(context)) return
@@ -249,7 +302,10 @@ object StartReminders {
         if (id < 0) return
         val app = context.applicationContext as NoctilApplication
         val repo = app.repository
-        if (intent.action != ACTION_START) NotificationManagerCompat.from(context).cancel(notificationId(id))
+        if (intent.action != ACTION_START && intent.action != ACTION_KEEP) {
+            NotificationManagerCompat.from(context).cancel(notificationId(id))
+            NotificationManagerCompat.from(context).cancel(0x5000_0000 + id.toInt())
+        }
         val pending = receiver.goAsync()
         repo.scope.launch {
             try {
@@ -257,6 +313,10 @@ object StartReminders {
                 if (task.done || task.deleted) return@launch
                 when (intent.action) {
                     ACTION_START -> show(context, task)
+                    ACTION_KEEP -> {
+                        showKeep(context, task)
+                        schedule(context, task) // the next one
+                    }
                     ACTION_LATER -> repo.updateNow(id) { it.withStart(later(it, LocalDateTime.now()).second) }
                     ACTION_DONE -> repo.setDoneNow(id, true)
                 }

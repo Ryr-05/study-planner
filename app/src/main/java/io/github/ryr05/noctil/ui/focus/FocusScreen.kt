@@ -107,6 +107,9 @@ fun FocusScreen(snapshot: Snapshot, today: LocalDate, onOpenMe: () -> Unit = {})
                 io.github.ryr05.noctil.ui.ProfileButton(onOpenMe)
             }
         }
+        item(key = "plan") {
+            io.github.ryr05.noctil.ui.components.TodayPlanCard(Modifier.padding(top = 18.dp))
+        }
         item(key = "modes") {
             Spacer(Modifier.height(20.dp))
             ModePicker(state) { FocusEngine.select(context, it) }
