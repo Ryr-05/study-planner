@@ -3,7 +3,9 @@
 // JSON reply. Keys live only here. Nothing is stored or logged.
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+// Groq's free models, best first. Each has its own limit, so the second picks up when the first is busy.
+// (Groq no longer offers Llama chat models; Cloudflare's Llama is the last backup below.)
+const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 const CF_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const MAX_BODY_CHARS = 80_000;
 const MAX_MESSAGES = 30;
@@ -26,19 +28,25 @@ export default {
     if (!messages) return reply({ error: "bad messages" }, 400);
 
     // 1) Groq, if a key is set. Any failure (quota, outage) falls through to Workers AI.
-    if (env.GROQ_API_KEY) {
+    let groqError = env.GROQ_API_KEY ? null : "no key";
+    for (const model of env.GROQ_API_KEY ? GROQ_MODELS : []) {
       try {
         const r = await fetch(GROQ_URL, {
           method: "POST",
           headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: GROQ_MODEL, messages, temperature: 0.3, max_tokens: 1500, response_format: { type: "json_object" } }),
+          body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 2000, reasoning_effort: "low", response_format: { type: "json_object" } }),
         });
         if (r.ok) {
           const d = await r.json();
           const content = d?.choices?.[0]?.message?.content;
-          if (typeof content === "string" && content.trim()) return reply({ provider: "groq", content, verified });
+          if (typeof content === "string" && content.trim()) return reply({ provider: `groq ${model}`, content, verified });
+          groqError = "empty reply";
+        } else {
+          // Just the status and Groq's short error text, never the key.
+          const err = await r.json().catch(() => ({}));
+          groqError = `${r.status} ${err?.error?.code || err?.error?.type || ""} ${(err?.error?.message || "").slice(0, 160)}`.trim();
         }
-      } catch (e) { /* try the backup */ }
+      } catch (e) { groqError = "network"; }
     }
 
     // 2) Cloudflare Workers AI (free daily allowance), no key needed.
@@ -46,7 +54,7 @@ export default {
       const out = await env.AI.run(CF_MODEL, { messages, temperature: 0.3, max_tokens: 1500, response_format: { type: "json_object" } });
       const r = out?.response;
       const content = typeof r === "string" ? r : r ? JSON.stringify(r) : "";
-      if (content.trim()) return reply({ provider: "workers-ai", content, verified });
+      if (content.trim()) return reply({ provider: "workers-ai", content, verified, groq: groqError });
     } catch (e) { /* both busy */ }
 
     return reply({ error: "busy" }, 503);
