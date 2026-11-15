@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Noctil AI, sign-in sync and the check for new versions on GitHub. The network state
+         lets the update check wait until there is a connection. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Reminders: show notifications, fire on time, and survive a reboot. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -61,6 +66,11 @@
             android:showWhenLocked="true"
             android:taskAffinity=""
             android:turnScreenOn="true" />
+
+        <service
+            android:name=".update.UpdateCheckJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <service
             android:name=".reminders.AlarmService"

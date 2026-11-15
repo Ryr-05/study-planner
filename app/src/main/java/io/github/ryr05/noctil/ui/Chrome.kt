@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -209,7 +210,28 @@ fun ProfileButton(onClick: () -> Unit) {
             RoundIconButton(Icons.Rounded.AutoAwesome, "Ask Noctil AI", onClick = openAssistant)
             Spacer(Modifier.width(8.dp))
         }
-        RoundIconButton(Icons.Rounded.Person, "Me and settings", onClick = onClick)
+        // A dot while a new version is waiting to be installed (Me shows the Update button).
+        val update by io.github.ryr05.noctil.update.Updates.available.collectAsState()
+        androidx.compose.foundation.layout.Box {
+            RoundIconButton(
+                Icons.Rounded.Person,
+                if (update != null) "Me and settings, update available" else "Me and settings",
+                onClick = onClick,
+            )
+            if (update != null) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 1.dp, end = 1.dp)
+                        .size(12.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Palette.Night)
+                        .padding(2.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Palette.Lavender),
+                )
+            }
+        }
     }
 }
 

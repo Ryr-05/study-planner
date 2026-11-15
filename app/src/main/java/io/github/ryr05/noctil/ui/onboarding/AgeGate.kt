@@ -309,6 +309,10 @@ val TERMS: List<Pair<String, String>> = listOf(
     "Plans are suggestions" to
         "Plans, reminders and AI answers can be wrong. Always check due dates with your class. Noctil is provided as is, " +
         "without any warranty.",
+    "Update checks" to
+        "About twice a day, and when you open the app, Noctil asks GitHub (where it's published) whether a newer version " +
+            "is out, so it can tell you. That request doesn't include your tasks or account; GitHub sees your IP address, " +
+            "like any website. You can turn the update notifications off in your phone's settings for Noctil.",
     "Free, no ads" to
         "Noctil is free, shows no ads and never sells your data.",
 )

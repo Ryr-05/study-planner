@@ -25,7 +25,8 @@ A free task planner and calendar for college students (18+). Works offline. Made
 3. Tap **Install**, then **Open**.
 
 **Updating:** tap the button again and install. It updates in place and keeps your data.
-You can also open the app, go to **Me > Check for updates**.
+Noctil tells you when a new version is out: a notification (tap it to download), a banner on Today
+and a dot on the profile button. You can also check yourself in **Me > Check for updates**.
 
 > If Google Play Protect shows a warning, tap **More details > Install anyway**.
 > It appears because the app is not on the Play Store, not because something is wrong.

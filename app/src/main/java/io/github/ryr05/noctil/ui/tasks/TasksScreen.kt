@@ -102,6 +102,9 @@ fun TasksScreen(
         Column(Modifier.fillMaxSize().padding(top = topContentPadding())) {
             Column(Modifier.padding(horizontal = 20.dp)) {
                 Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
+                if (view == TaskView.Today && selection == null) {
+                    io.github.ryr05.noctil.ui.components.UpdateBanner(Modifier.padding(top = 14.dp))
+                }
                 LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp, bottom = 12.dp))
             }
             val tasks = tasksInView(view, snapshot, today)
@@ -133,6 +136,11 @@ fun TasksScreen(
     ) {
         item(key = "header") {
             Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
+        }
+        if (view == TaskView.Today && selection == null) {
+            item(key = "update") {
+                io.github.ryr05.noctil.ui.components.UpdateBanner(Modifier.padding(top = 14.dp))
+            }
         }
         item(key = "layouts") {
             LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp))

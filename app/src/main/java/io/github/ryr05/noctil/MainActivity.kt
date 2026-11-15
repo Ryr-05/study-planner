@@ -46,6 +46,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Look for a new version when the app comes to the front (at most every few hours).
+        io.github.ryr05.noctil.update.Updates.checkIfStale(this)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         read(intent)

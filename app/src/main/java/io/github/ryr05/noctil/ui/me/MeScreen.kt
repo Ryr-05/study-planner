@@ -16,7 +16,9 @@ import androidx.compose.runtime.setValue
 import io.github.ryr05.noctil.reminders.LockscreenCard
 import io.github.ryr05.noctil.reminders.Notifications
 import androidx.compose.runtime.LaunchedEffect
+import io.github.ryr05.noctil.update.Updates
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -47,7 +49,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.ui.Modifier
@@ -57,7 +61,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import io.github.ryr05.noctil.ui.components.ScreenTitle
 import io.github.ryr05.noctil.ui.components.SectionLabel
 import io.github.ryr05.noctil.ui.components.bottomContentPadding
@@ -65,7 +68,6 @@ import io.github.ryr05.noctil.ui.components.groupShape
 import io.github.ryr05.noctil.ui.components.topContentPadding
 import io.github.ryr05.noctil.ui.theme.Palette
 
-private const val RELEASES_URL = "https://github.com/Ryr-05/study-planner/releases/latest"
 
 private val typingTips = listOf(
     "fri 5pm, tomorrow 9am" to "Due day and time",
@@ -183,14 +185,36 @@ fun MeScreen(askedForNotificationsBefore: Boolean, onAskNotifications: () -> Uni
             SettingRow(Icons.Rounded.Info, "Version", version, trailing = null, index = 0, count = 3)
         }
         item(key = "update") {
+            // Noctil also checks on its own (Updates): this shows what it found, or checks right now.
+            val release by Updates.available.collectAsState()
+            var result by remember { mutableStateOf<Updates.Result?>(null) }
+            var checking by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            val r = release
             SettingRow(
                 icon = Icons.Rounded.SystemUpdate,
-                title = "Check for updates",
-                detail = "Opens the download page on GitHub",
-                trailing = null,
+                title = if (r != null) "Noctil ${r.version} is ready" else "Check for updates",
+                detail = when {
+                    r != null -> if (r.whatsNew.isBlank()) "Tap to download. Your tasks stay." else "New: ${r.whatsNew}"
+                    checking -> "Checking..."
+                    result == Updates.Result.UpToDate -> "You have the latest version"
+                    result == Updates.Result.Failed -> "Couldn't reach GitHub. Tap to open the download page"
+                    else -> "Noctil checks on its own and tells you when one is out"
+                },
+                trailing = if (r != null) "Update" else null,
                 index = 1,
                 count = 3,
-                onClick = { openUrl(context, RELEASES_URL) },
+                onClick = {
+                    when {
+                        r != null -> Updates.download(context)
+                        result == Updates.Result.Failed -> Updates.openReleasePage(context)
+                        !checking -> scope.launch {
+                            checking = true
+                            result = Updates.check(context, notify = false)
+                            checking = false
+                        }
+                    }
+                },
             )
         }
         item(key = "terms") {
@@ -309,10 +333,3 @@ private fun appVersion(context: Context): String = try {
     "Unknown"
 }
 
-private fun openUrl(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (e: ActivityNotFoundException) {
-        // No browser installed: nothing to open.
-    }
-}
