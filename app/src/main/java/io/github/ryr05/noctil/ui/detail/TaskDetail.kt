@@ -109,6 +109,7 @@ import io.github.ryr05.noctil.ui.components.WhenKind
 import io.github.ryr05.noctil.ui.components.WhenPickerDialog
 import io.github.ryr05.noctil.ui.components.dueText
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import io.github.ryr05.noctil.reminders.StartReminders
 import io.github.ryr05.noctil.parse.SmartParser
 import io.github.ryr05.noctil.ui.components.CheckCircle
@@ -310,7 +311,8 @@ private fun DetailContent(
 
         item(key = "priority") {
             SectionTitle("Priority")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Wraps to a second line with big system text, so every choice stays visible.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Priority.None, Priority.Low, Priority.Medium, Priority.High).forEach { p ->
                     Pill(
                         text = p.label,
@@ -654,18 +656,27 @@ private fun PropertyRow(
             .clip(RoundedCornerShape(16.dp))
             .background(Palette.Surface.copy(alpha = 0.7f))
             .clickable(onClickLabel = "Change $label", role = Role.Button, onClick = onClick)
-            .padding(start = 14.dp, end = 4.dp)
-            .height(52.dp),
+            .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+            // Grows with big system text instead of cutting words off.
+            .heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = if (active) Palette.Lavender else Palette.TextSecondary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = Palette.TextSecondary, modifier = Modifier.width(84.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Palette.TextSecondary,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 84.dp).padding(end = 8.dp),
+        )
         Text(
             value,
             style = MaterialTheme.typography.bodyLarge,
             color = if (active) Palette.TextPrimary else Palette.TextTertiary,
-            maxLines = 1,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (onClear != null) {
