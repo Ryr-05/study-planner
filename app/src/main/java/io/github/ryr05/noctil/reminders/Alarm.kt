@@ -56,6 +56,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Snooze
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -104,8 +105,8 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** What's ringing right now, shown on the alarm screen. */
-data class Ringing(val taskId: Long, val title: String, val detail: String)
+/** What's ringing right now, shown on the alarm screen. [start]: a "Time to start" alarm, not the deadline. */
+data class Ringing(val taskId: Long, val title: String, val detail: String, val start: Boolean = false)
 
 /**
  * Rings a task like a phone alarm: loud sound on the alarm volume, vibration, and a full-screen
@@ -118,6 +119,10 @@ class AlarmService : Service() {
     private var vibrator: Vibrator? = null
     private var focus: AudioFocusRequest? = null
     private var current: Long = NO_TASK
+    private var currentStart = false
+    /** Alarms that went off while another was ringing: each rings after the one before it. */
+    private val waiting = ArrayDeque<Pair<Long, Boolean>>()
+    private var shown: Pair<Int, android.app.Notification>? = null
     private val timeFormat = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -130,9 +135,12 @@ class AlarmService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_SNOOZE -> {
-                val minutes = AlarmPrefs.snoozeMinutes(this)
+                val at = System.currentTimeMillis() + AlarmPrefs.snoozeMinutes(this) * 60_000L
+                val start = currentStart
                 finishWith { app ->
-                    if (id >= 0) app.scheduler.scheduleAt(id, System.currentTimeMillis() + minutes * 60_000L, alarmClock = true)
+                    if (id >= 0) {
+                        if (start) StartReminders.ringAgainAt(app, id, at) else app.scheduler.scheduleAt(id, at, alarmClock = true)
+                    }
                 }
                 return START_NOT_STICKY
             }
@@ -141,9 +149,22 @@ class AlarmService : Service() {
                 return START_NOT_STICKY
             }
         }
-        // Must go to the foreground right away; the task's details fill in a moment later.
-        goForeground(Ringing(id, "Alarm", ""), full = false)
+        val start = intent?.getBooleanExtra(EXTRA_START, false) == true
+        if (current != NO_TASK) {
+            // Already ringing: this one waits its turn, so two alarms at the same minute don't hide each other.
+            if (id != current && waiting.none { it.first == id }) waiting.addLast(id to start)
+            shown?.let { (nid, n) -> foreground(nid, n) } // every startForegroundService needs a startForeground
+            return START_NOT_STICKY
+        }
+        ring(id, start)
+        return START_NOT_STICKY
+    }
+
+    private fun ring(id: Long, start: Boolean) {
         current = id
+        currentStart = start
+        // Must go to the foreground right away; the task's details fill in a moment later.
+        goForeground(Ringing(id, "Alarm", "", start), full = false)
         scope.launch {
             val ringing = if (id == PREVIEW) {
                 Ringing(PREVIEW, "This is how alarms look", "Tap Stop to end the test")
@@ -151,43 +172,64 @@ class AlarmService : Service() {
                 val app = applicationContext as NoctilApplication
                 val task = app.repository.task(id)
                 if (task == null || task.done || task.deleted) {
-                    stopEverything()
+                    next()
                     return@launch
                 }
                 val list = app.repository.listName(task.listId)
-                val due = task.localTime()?.let { "Due ${it.format(timeFormat)}" } ?: "Due today"
-                Ringing(id, task.title, listOfNotNull(due, list).joinToString("  |  "))
+                val due = if (start) StartReminders.dueText(task) else task.localTime()?.let { "Due ${it.format(timeFormat)}" } ?: "Due today"
+                Ringing(id, task.title, listOfNotNull(if (start) "Time to start" else null, due, list).joinToString("  |  "), start)
             }
             _ringing.value = ringing
             goForeground(ringing, full = true)
+            popUp()
             startSound()
             startVibration()
             handler.removeCallbacksAndMessages(TIMEOUT_TOKEN)
             handler.postAtTime({ timeOut() }, TIMEOUT_TOKEN, android.os.SystemClock.uptimeMillis() + RING_LIMIT_MS)
         }
-        return START_NOT_STICKY
+    }
+
+    /**
+     * While the phone is in use, Android shows a full-screen alarm only as a banner. With "Display
+     * over other apps" allowed, open the alarm page ourselves so it takes over the screen.
+     */
+    private fun popUp() {
+        if (!AlarmPrefs.canPopUp(this)) return
+        runCatching { startActivity(Intent(this, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
+    /** The current alarm is over: ring the next waiting one, or stop. */
+    private fun next() {
+        stopSound()
+        val upcoming = waiting.removeFirstOrNull()
+        if (upcoming != null) ring(upcoming.first, upcoming.second) else stopEverything()
     }
 
     /** Nobody answered: stop the noise and leave a normal reminder behind. */
     private fun timeOut() {
         val id = current
+        val start = currentStart
+        stopSound()
         scope.launch {
             val app = applicationContext as NoctilApplication
             if (id >= 0) {
                 app.repository.task(id)?.let { task ->
-                    Notifications.showReminder(this@AlarmService, task, app.repository.listName(task.listId))
-                    if (task.nag) app.scheduler.scheduleAt(id, System.currentTimeMillis() + 5 * 60_000L)
+                    if (start) {
+                        StartReminders.show(this@AlarmService, task)
+                    } else {
+                        Notifications.showReminder(this@AlarmService, task, app.repository.listName(task.listId))
+                        if (task.nag) app.scheduler.scheduleAt(id, System.currentTimeMillis() + 5 * 60_000L)
+                    }
                 }
             }
-            stopEverything()
+            next()
         }
     }
 
     private fun finishWith(action: suspend (NoctilApplication) -> Unit) {
         val app = applicationContext as NoctilApplication
-        stopSound()
         app.repository.scope.launch { action(app) }
-        stopEverything()
+        next()
     }
 
     /**
@@ -198,12 +240,17 @@ class AlarmService : Service() {
     private fun goForeground(r: Ringing, full: Boolean) {
         val id = if (full) NOTIFICATION_ID else PLACEHOLDER_ID
         val notification = buildNotification(r, full)
+        foreground(id, notification)
+        shown = id to notification
+        getSystemService(NotificationManager::class.java).cancel(if (full) PLACEHOLDER_ID else NOTIFICATION_ID)
+    }
+
+    private fun foreground(id: Int, notification: android.app.Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(id, notification)
         }
-        getSystemService(NotificationManager::class.java).cancel(if (full) PLACEHOLDER_ID else NOTIFICATION_ID)
     }
 
     /** [full] posts the full-screen page too; the first quick placeholder doesn't, to avoid a flash. */
@@ -306,6 +353,9 @@ class AlarmService : Service() {
 
     private fun stopEverything() {
         stopSound()
+        current = NO_TASK
+        waiting.clear()
+        shown = null
         _ringing.value = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -331,6 +381,7 @@ class AlarmService : Service() {
         private const val ACTION_DONE = "io.github.ryr05.noctil.ALARM_DONE"
         private const val ACTION_SNOOZE = "io.github.ryr05.noctil.ALARM_SNOOZE"
         private const val ACTION_STOP = "io.github.ryr05.noctil.ALARM_STOP"
+        private const val EXTRA_START = "io.github.ryr05.noctil.ALARM_IS_START"
 
         private val _ringing = MutableStateFlow<Ringing?>(null)
         val ringing: StateFlow<Ringing?> = _ringing
@@ -345,17 +396,16 @@ class AlarmService : Service() {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
 
-        /** Starts ringing. Returns false if Android didn't allow it, so the caller can fall back to a notification. */
-        fun start(context: Context, taskId: Long): Boolean = runCatching {
-            ContextCompat.startForegroundService(context, Intent(context, AlarmService::class.java).putExtra(EXTRA_TASK_ID, taskId))
+        /**
+         * Starts ringing ([start]: a "Time to start" alarm). Returns false if Android didn't allow it,
+         * so the caller can fall back to a notification.
+         */
+        fun start(context: Context, taskId: Long, start: Boolean = false): Boolean = runCatching {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, AlarmService::class.java).putExtra(EXTRA_TASK_ID, taskId).putExtra(EXTRA_START, start),
+            )
         }.isSuccess
-
-        /** Rings a test alarm now and opens the alarm screen (Noctil is open, so it's allowed). */
-        fun preview(context: Context) {
-            if (start(context, PREVIEW)) {
-                context.startActivity(Intent(context, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-        }
 
         fun done(context: Context, taskId: Long) = context.startService(action(context, ACTION_DONE, taskId))
         fun snooze(context: Context, taskId: Long) = context.startService(action(context, ACTION_SNOOZE, taskId))
@@ -403,9 +453,22 @@ class AlarmActivity : ComponentActivity() {
                 AlarmScreen(
                     ringing = ringing,
                     snoozeMinutes = AlarmPrefs.snoozeMinutes(this),
-                    onDone = { ringing?.let { AlarmService.done(this, it.taskId) }; finish() },
-                    onSnooze = { ringing?.let { AlarmService.snooze(this, it.taskId) }; finish() },
-                    onStop = { AlarmService.stop(this, ringing?.taskId ?: AlarmService.PREVIEW); finish() },
+                    // The page closes itself once nothing is ringing; if another alarm is waiting, it shows that one.
+                    onDone = { ringing?.let { AlarmService.done(this, it.taskId) } },
+                    onSnooze = { ringing?.let { AlarmService.snooze(this, it.taskId) } },
+                    onStop = { AlarmService.stop(this, ringing?.taskId ?: AlarmService.PREVIEW) },
+                    onFocus = {
+                        val r = ringing
+                        if (r != null && r.taskId >= 0) {
+                            AlarmService.stop(this, r.taskId)
+                            startActivity(
+                                io.github.ryr05.noctil.Launch.focus(this, startNext = true)
+                                    .putExtra(io.github.ryr05.noctil.Launch.EXTRA_FOCUS_TASK, r.taskId)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                        finish()
+                    },
                     onOpen = {
                         val r = ringing
                         if (r != null && r.taskId >= 0) {
@@ -432,6 +495,7 @@ fun AlarmScreen(
     onSnooze: () -> Unit,
     onStop: () -> Unit,
     onOpen: () -> Unit,
+    onFocus: () -> Unit = {},
 ) {
     val now by produceState(LocalTime.now()) {
         while (true) {
@@ -518,7 +582,13 @@ fun AlarmScreen(
             }
         }
         Column(Modifier.padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (isTask) {
+            if (isTask && ringing?.start == true) {
+                // "Time to start": the point is to begin, so starting a focus session comes first.
+                BigButton("Start focus", Icons.Rounded.PlayArrow, primary = true, onClick = onFocus)
+                Spacer(Modifier.height(12.dp))
+                BigButton("Snooze $snoozeMinutes min", Icons.Rounded.Snooze, primary = false, onClick = onSnooze)
+                Spacer(Modifier.height(8.dp))
+            } else if (isTask) {
                 BigButton("Done", Icons.Rounded.Check, primary = true, onClick = onDone)
                 Spacer(Modifier.height(12.dp))
                 BigButton("Snooze $snoozeMinutes min", Icons.Rounded.Snooze, primary = false, onClick = onSnooze)

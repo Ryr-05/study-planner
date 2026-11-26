@@ -47,7 +47,7 @@ show tappable examples to get you started.
 | Repeat | Daily, weekdays, weekly on chosen days, every few days, monthly, yearly |
 | Reminders | Notification at the time you choose, with **Done** and **Snooze 10 min** buttons. Optional "keep reminding until done". Survives restarts |
 | Start reminders | A second nudge for *when to start*, apart from the deadline. Add a task with a due date and quick add suggests 7 PM the day before (tap to change, x to remove), or type "essay due fri start thu 7pm". The nudge says "Time to start" with **Start focus**, **Tomorrow** and **Done**, and the task shows under **Start today** |
-| Alarms | Any task can ring like the Clock app: full screen over the lockscreen, sound until you stop it, Done or Snooze. Pick a phone alarm tone or add your own MP3. Settings in Me |
+| Alarms | Every task with a time rings like the Clock app by default, and so does "Time to start": full screen over the lockscreen and over other apps, sound until you stop it, Done or Snooze (Start focus for start alarms). Alarms at the same minute ring one after another. Tasks with only a date get a notification. A setup checklist in Me (and on Today until it's done) covers the permissions Android and phones like Vivo need, plus a 15-second test. Pick a phone alarm tone or add your own MP3 |
 | Big text | Works with the phone's largest text size: text grows, layouts stay usable |
 | Places | Save a spot like your campus, then get reminded when you arrive. No map account needed |
 | Speed | Swipe right to finish, swipe left to move to tomorrow, Undo after every change. Long-press to select many and finish, reschedule, move, tag or delete them together |

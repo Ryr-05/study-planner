@@ -1,15 +1,18 @@
 package io.github.ryr05.noctil.reminders
 
+import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import io.github.ryr05.noctil.data.db.TaskEntity
 import java.io.File
 
 /** A sound an alarm can play. [uri] null means the phone's default alarm sound. */
@@ -30,9 +33,36 @@ object AlarmPrefs {
         putString("sound_name", sound.name)
     }
 
-    /** Every reminder rings as an alarm, not only tasks marked "Ring like an alarm". */
-    fun allReminders(context: Context) = prefs(context).getBoolean("all_reminders", false)
-    fun setAllReminders(context: Context, value: Boolean) = prefs(context).edit { putBoolean("all_reminders", value) }
+    /** Due reminders of tasks with a time ring as full alarms. On unless turned off in Me > Alarms. */
+    fun dueAlarms(context: Context) = prefs(context).getBoolean("due_alarms", true)
+    fun setDueAlarms(context: Context, value: Boolean) = prefs(context).edit { putBoolean("due_alarms", value) }
+
+    /** "Time to start" rings as a full alarm. On unless turned off in Me > Alarms. */
+    fun startAlarms(context: Context) = prefs(context).getBoolean("start_alarms", true)
+    fun setStartAlarms(context: Context, value: Boolean) = prefs(context).edit { putBoolean("start_alarms", value) }
+
+    /**
+     * A due reminder rings as a full alarm when the task is marked to ring, or when it has a time
+     * and due alarms are on. Tasks with only a date (reminded at 9 AM) stay a notification.
+     */
+    fun ringsDue(marked: Boolean, dueAlarmsOn: Boolean, hasTime: Boolean) = marked || (dueAlarmsOn && hasTime)
+    fun ringsDue(context: Context, task: TaskEntity) = ringsDue(task.alarm, dueAlarms(context), task.dueTime != null)
+
+    /** "Display over other apps": lets the alarm page open while you're using another app. */
+    fun canPopUp(context: Context) = Settings.canDrawOverlays(context)
+    fun popUpSettings(context: Context) = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+
+    /** Out of battery optimization, so Android (and the phone's own battery saver) lets alarms wake Noctil. */
+    fun canRunAsleep(context: Context) =
+        context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+
+    @SuppressLint("BatteryLife") // an alarm app is the documented case for asking
+    fun runAsleepSettings(context: Context) =
+        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri())
+
+    /** When the Today banner about alarm permissions may show again after Later. */
+    fun setupLaterUntil(context: Context) = prefs(context).getLong("setup_later_until", 0L)
+    fun setSetupLaterUntil(context: Context, millis: Long) = prefs(context).edit { putLong("setup_later_until", millis) }
 
     fun vibrate(context: Context) = prefs(context).getBoolean("vibrate", true)
     fun setVibrate(context: Context, value: Boolean) = prefs(context).edit { putBoolean("vibrate", value) }

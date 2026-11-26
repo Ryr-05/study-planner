@@ -46,7 +46,7 @@ class ReminderScheduler(private val context: Context) {
         val at = Reminders.triggerAt(task.localDate(), task.localTime(), task.reminder) ?: return
         val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         if (millis <= System.currentTimeMillis()) return
-        scheduleAt(task.id, millis, alarmClock = task.alarm || AlarmPrefs.allReminders(context))
+        scheduleAt(task.id, millis, alarmClock = AlarmPrefs.ringsDue(context, task))
     }
 
     /**
@@ -169,7 +169,12 @@ object Notifications {
 /** Fires at the reminder time and shows the notification. */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val id = intent.getLongExtra(EXTRA_TASK_ID, -1L)
+        val id = intent.getLongExtra(EXTRA_TASK_ID, Long.MIN_VALUE)
+        // The "test an alarm" button in Me > Alarms: rings through this same path, so the test is real.
+        if (id == AlarmService.PREVIEW) {
+            AlarmService.start(context, id)
+            return
+        }
         if (id < 0) return
         val app = context.applicationContext as NoctilApplication
         val pending = goAsync()
@@ -177,7 +182,7 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 val task = app.repository.task(id)
                 if (task != null && !task.done && !task.deleted) {
-                    val ring = (task.alarm || AlarmPrefs.allReminders(context)) && Notifications.canNotify(context)
+                    val ring = AlarmPrefs.ringsDue(context, task) && Notifications.canNotify(context)
                     // Ring like an alarm clock; if Android refuses, fall back to a normal reminder.
                     if (!ring || !AlarmService.start(context, id)) {
                         Notifications.showReminder(context, task, app.repository.listName(task.listId))

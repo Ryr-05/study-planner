@@ -103,6 +103,7 @@ fun TasksScreen(
             Column(Modifier.padding(horizontal = 20.dp)) {
                 Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
                 if (view == TaskView.Today && selection == null) {
+                    io.github.ryr05.noctil.ui.me.AlarmSetupBanner(Modifier.padding(top = 14.dp))
                     io.github.ryr05.noctil.ui.components.UpdateBanner(Modifier.padding(top = 14.dp))
                 }
                 LayoutSwitch(layout, onLayout, Modifier.padding(top = 14.dp, bottom = 12.dp))
@@ -138,6 +139,9 @@ fun TasksScreen(
             Header(view, snapshot, today, onOpenLists, onOpenSearch, onOpenMe)
         }
         if (view == TaskView.Today && selection == null) {
+            item(key = "alarm-setup") {
+                io.github.ryr05.noctil.ui.me.AlarmSetupBanner(Modifier.padding(top = 14.dp))
+            }
             item(key = "update") {
                 io.github.ryr05.noctil.ui.components.UpdateBanner(Modifier.padding(top = 14.dp))
             }

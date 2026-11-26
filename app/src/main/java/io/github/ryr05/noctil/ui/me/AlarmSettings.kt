@@ -1,6 +1,5 @@
 package io.github.ryr05.noctil.ui.me
 
-import android.content.ActivityNotFoundException
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
@@ -25,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -61,14 +59,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ryr05.noctil.NoctilApplication
 import io.github.ryr05.noctil.reminders.AlarmPrefs
-import io.github.ryr05.noctil.reminders.AlarmService
 import io.github.ryr05.noctil.reminders.AlarmSound
 import io.github.ryr05.noctil.reminders.AlarmSounds
 import io.github.ryr05.noctil.ui.components.SectionLabel
 import io.github.ryr05.noctil.ui.components.groupShape
 import io.github.ryr05.noctil.ui.theme.Palette
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -82,47 +78,33 @@ fun LazyListScope.alarmSection() {
 private fun AlarmSettings() {
     val context = LocalContext.current
     var sound by remember { mutableStateOf(AlarmPrefs.sound(context)) }
-    var all by remember { mutableStateOf(AlarmPrefs.allReminders(context)) }
+    var due by remember { mutableStateOf(AlarmPrefs.dueAlarms(context)) }
+    var start by remember { mutableStateOf(AlarmPrefs.startAlarms(context)) }
     var vibrate by remember { mutableStateOf(AlarmPrefs.vibrate(context)) }
     var gentle by remember { mutableStateOf(AlarmPrefs.gentle(context)) }
     var snooze by remember { mutableStateOf(AlarmPrefs.snoozeMinutes(context)) }
     var picking by remember { mutableStateOf(false) }
-    var fullScreenOk by remember { mutableStateOf(AlarmPrefs.canShowFullScreen(context)) }
-    LaunchedEffect(Unit) {
-        // Re-checked while open, so it updates after coming back from settings.
-        while (true) {
-            fullScreenOk = AlarmPrefs.canShowFullScreen(context)
-            delay(1_500)
-        }
-    }
-    val rows = 6 + if (fullScreenOk) 0 else 1
+    val rows = 6
     var i = 0
 
     Column {
         Text(
-            "Any task can ring like your phone's alarm clock: full screen, even on the lockscreen, until you stop it. " +
-                "Turn it on in a task's Remind menu, or for every reminder below.",
+            "Tasks with a time ring like your phone's alarm clock: full screen, even on the lockscreen or over other " +
+                "apps, until you stop it. \"Time to start\" rings too. Tasks with only a date get a notification.",
             style = MaterialTheme.typography.labelMedium,
             color = Palette.TextSecondary,
             modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp),
         )
-        if (!fullScreenOk) {
-            ActionRow(
-                Icons.Rounded.Fullscreen, "Allow full-screen alarms",
-                "Android has this turned off for Noctil, so alarms only show as a banner. Tap to allow.",
-                i++, rows, accent = Palette.PriorityMedium,
-            ) {
-                try {
-                    context.startActivity(AlarmPrefs.fullScreenSettings(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (e: ActivityNotFoundException) {
-                    // Nothing to open on this phone.
-                }
-            }
-        }
+        AlarmSetupSteps(Modifier.padding(bottom = 12.dp))
         ActionRow(Icons.Rounded.MusicNote, "Alarm sound", sound.name, i++, rows) { picking = true }
-        SwitchRow(Icons.Rounded.NotificationsActive, "Ring every reminder as an alarm", if (all) "On for all tasks" else "Only tasks you choose", all, i++, rows) {
-            all = it
-            AlarmPrefs.setAllReminders(context, it)
+        SwitchRow(Icons.Rounded.NotificationsActive, "Due reminders ring as alarms", if (due) "Every task with a time" else "Only tasks you choose", due, i++, rows) {
+            due = it
+            AlarmPrefs.setDueAlarms(context, it)
+            (context.applicationContext as NoctilApplication).repository.rescheduleAll()
+        }
+        SwitchRow(Icons.Rounded.PlayCircle, "\"Time to start\" rings as an alarm", if (start) "Full screen when it's time to begin" else "A notification instead", start, i++, rows) {
+            start = it
+            AlarmPrefs.setStartAlarms(context, it)
             (context.applicationContext as NoctilApplication).repository.rescheduleAll()
         }
         SwitchRow(Icons.Rounded.Vibration, "Vibrate", if (vibrate) "On" else "Off", vibrate, i++, rows) {
@@ -137,9 +119,6 @@ private fun AlarmSettings() {
             val options = listOf(5, 10, 15, 30)
             snooze = options[(options.indexOf(snooze) + 1).mod(options.size)]
             AlarmPrefs.setSnoozeMinutes(context, snooze)
-        }
-        ActionRow(Icons.Rounded.PlayCircle, "Try an alarm", "Rings now so you can see and hear it", i++, rows) {
-            AlarmService.preview(context)
         }
     }
 

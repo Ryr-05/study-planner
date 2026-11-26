@@ -586,9 +586,17 @@ private fun RemindersDialog(
                 }
                 // How the deadline reminder alerts.
                 if (task.date != null && task.reminder != null) {
-                    SwitchRow("Ring like an alarm", "Full screen, with sound until you stop it", task.alarm) {
-                        repo.update(task.id) { t -> t.copy(alarm = !task.alarm) }
-                        onReminderSet()
+                    // Tasks with a time ring anyway while "Due reminders ring as alarms" is on (Me > Alarms).
+                    val alwaysRings = task.time != null && io.github.ryr05.noctil.reminders.AlarmPrefs.dueAlarms(LocalContext.current)
+                    SwitchRow(
+                        "Ring like an alarm",
+                        if (alwaysRings) "Tasks with a time always ring. Change that in Me > Alarms" else "Full screen, with sound until you stop it",
+                        task.alarm || alwaysRings,
+                    ) {
+                        if (!alwaysRings) {
+                            repo.update(task.id) { t -> t.copy(alarm = !task.alarm) }
+                            onReminderSet()
+                        }
                     }
                     SwitchRow("Keep reminding until done", "Every 5 minutes until you tap Done", task.nag) {
                         repo.update(task.id) { t -> t.copy(nag = !task.nag) }

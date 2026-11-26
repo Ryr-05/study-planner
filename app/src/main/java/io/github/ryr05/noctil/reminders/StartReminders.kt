@@ -176,20 +176,29 @@ object StartReminders {
     fun schedule(context: Context, task: TaskEntity) {
         cancel(context, task.id)
         if (task.done || task.deleted) return
-        val now = System.currentTimeMillis()
-        task.startAt()?.let { at -> setAlarm(context, task.id, ACTION_START, at, now) }
+        val millis = { at: LocalDateTime -> at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+        task.startAt()?.let { at -> setAlarm(context, task.id, ACTION_START, millis(at)) }
         nextKeep(task.keepEvery, task.startAt(), task.localDate(), task.localTime(), LocalDateTime.now())
-            ?.let { at -> setAlarm(context, task.id, ACTION_KEEP, at, now) }
+            ?.let { at -> setAlarm(context, task.id, ACTION_KEEP, millis(at)) }
     }
 
-    private fun setAlarm(context: Context, taskId: Long, action: String, at: LocalDateTime, now: Long) {
-        val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        if (millis <= now) return
+    /** Snooze on a "Time to start" alarm: ring again at [millis]. */
+    fun ringAgainAt(context: Context, taskId: Long, millis: Long) = setAlarm(context, taskId, ACTION_START, millis)
+
+    private fun setAlarm(context: Context, taskId: Long, action: String, millis: Long) {
+        if (millis <= System.currentTimeMillis()) return
         val alarms = context.getSystemService(AlarmManager::class.java)
         val pending = pendingIntent(context, taskId, create = true, action) ?: return
         val exact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarms.canScheduleExactAlarms() else true
-        if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
-        else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        when {
+            // Alarm-clock timing: exact in Doze and battery saver, like the phone's own Clock app.
+            exact && action == ACTION_START && AlarmPrefs.startAlarms(context) -> alarms.setAlarmClock(
+                AlarmManager.AlarmClockInfo(millis, Launch.pending(context, Launch.openTask(context, taskId), notificationId(taskId))),
+                pending,
+            )
+            exact -> alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+            else -> alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        }
     }
 
     fun cancel(context: Context, taskId: Long) {
@@ -312,7 +321,11 @@ object StartReminders {
                 val task = repo.task(id) ?: return@launch
                 if (task.done || task.deleted) return@launch
                 when (intent.action) {
-                    ACTION_START -> show(context, task)
+                    ACTION_START -> {
+                        // Rings full screen like the due alarm; a notification if that's off or Android refuses.
+                        val ring = AlarmPrefs.startAlarms(context) && Notifications.canNotify(context)
+                        if (!ring || !AlarmService.start(context, id, start = true)) show(context, task)
+                    }
                     ACTION_KEEP -> {
                         showKeep(context, task)
                         schedule(context, task) // the next one
